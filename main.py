@@ -6,12 +6,18 @@ import requests
 st.set_page_config(page_title="AI 智能食谱与健康管理师", page_icon="🥗", layout="wide")
 st.title("🥗 AI 智能食谱与健康社区 (Beta)")
 
-# --- 侧边栏：全局配置 ---
+# --- 侧边栏：全局状态 ---
 with st.sidebar:
-    st.header("⚙️ 系统配置")
-    api_key = st.text_input("🔑 阿里云 API Key:", type="password")
-    if not api_key:
-        st.warning("⚠️ 请输入 API Key 以激活所有 AI 功能")
+    st.header("⚙️ 系统状态")
+    # 自动从云端保密柜中悄悄读取秘钥
+    try:
+        api_key = st.secrets["ALIYUN_API_KEY"]
+        st.success("✅ AI 引擎已全功率运行！所有人均可直接使用。")
+    except Exception:
+        api_key = ""
+        st.error("⚠️ 网站维护中：云端保密柜未配置，请联系管理员。")
+        st.stop() # 如果没拿到秘钥，为了防止报错，暂停后续运行
+        
     st.markdown("---")
     st.write("📌 提示：社区交流与个人档案存储功能正在开发中 (Phase 2)...")
 
@@ -76,9 +82,7 @@ with tab1:
             st.image(uploaded_file, caption="待处理食材", use_container_width=True)
 
     if st.button("🍳 开始生成专属菜谱", type="primary"):
-        if not api_key:
-            st.error("请先在左侧侧边栏填入 API Key！")
-        elif not uploaded_file:
+        if not uploaded_file:
             st.warning("请先上传一张食材照片！")
         else:
             with st.spinner("👨‍🍳 AI 厨师正在识别食材并构思菜谱..."):
@@ -96,9 +100,7 @@ with tab2:
     question = st.text_area("你想问什么？（例如：熬夜后吃什么能快速恢复？喝黑咖啡真的能减肥吗？）", height=100)
 
     if st.button("💡 提交问题"):
-        if not api_key:
-            st.error("请先在左侧侧边栏填入 API Key！")
-        elif not question:
+        if not question:
             st.warning("你还没输入问题呢！")
         else:
             with st.spinner("正在查阅最新的健康营养文献..."):
@@ -129,9 +131,7 @@ with tab3:
     meals_input = st.text_area("请尽可能详细地描述（例如：早餐吃了两个水煮蛋和一杯燕麦奶；午餐吃了黄焖鸡米饭；晚餐吃了一根香蕉）", height=150)
 
     if st.button("🔬 生成深度营养分析报告", type="primary"):
-        if not api_key:
-            st.error("请先在左侧侧边栏填入 API Key！")
-        elif len(meals_input) < 5:
+        if len(meals_input) < 5:
             st.warning("请多写一点你吃的东西，不然 AI 没法算哦！")
         else:
             with st.spinner("🧮 正在拆解五大营养素，计算热量差..."):
