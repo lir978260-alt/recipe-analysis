@@ -1,32 +1,50 @@
 import streamlit as st
 import base64
 import requests
+from supabase import create_client, Client
 
 # --- 网页基本设置 ---
 st.set_page_config(page_title="AI 智能食谱与健康管理师", page_icon="🥗", layout="wide")
 st.title("🥗 AI 智能食谱与健康社区 (Beta)")
 
+# --- 数据库初始化连接 ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+try:
+    supabase: Client = init_connection()
+    db_connected = True
+except Exception:
+    db_connected = False
+
 # --- 侧边栏：全局状态 ---
 with st.sidebar:
     st.header("⚙️ 系统状态")
-    # 自动从云端保密柜中悄悄读取秘钥
     try:
         api_key = st.secrets["ALIYUN_API_KEY"]
-        st.success("✅ AI 引擎已全功率运行！所有人均可直接使用。")
+        st.success("✅ AI 引擎已全功率运行！")
     except Exception:
         api_key = ""
-        st.error("⚠️ 网站维护中：云端保密柜未配置，请联系管理员。")
-        st.stop() # 如果没拿到秘钥，为了防止报错，暂停后续运行
+        st.error("⚠️ 云端保密柜未配置 API Key。")
+        st.stop()
+        
+    if db_connected:
+        st.success("✅ 社区数据库已连接上线！")
+    else:
+        st.error("⚠️ 数据库连接失败，请检查 Secrets 配置。")
         
     st.markdown("---")
-    st.write("📌 提示：社区交流与个人档案存储功能正在开发中 (Phase 2)...")
+    st.write("📌 提示：这是一个基于大模型的全栈营养管理应用。")
 
 # --- 通用 AI 调用函数 (处理纯文本) ---
 def ask_ai_text(system_prompt, user_prompt, key):
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
     headers = {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
     data = {
-        "model": "qwen-plus", # 文本处理用通义千问 Plus
+        "model": "qwen-plus",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -45,7 +63,7 @@ def ask_ai_vision(image_bytes, user_prompt, key):
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
     headers = {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
     data = {
-        "model": "qwen-vl-plus", # 图像识别专用模型
+        "model": "qwen-vl-plus",
         "messages": [
             {
                 "role": "user",
@@ -64,7 +82,7 @@ def ask_ai_vision(image_bytes, user_prompt, key):
         return f"❌ 视觉系统错误: {str(e)}"
 
 # --- 核心界面划分 ---
-tab1, tab2, tab3 = st.tabs(["📸 功能1: 看图出菜谱", "💬 功能2: 健康问答区", "⚖️ 功能3: 三餐热量精算"])
+tab1, tab2, tab3, tab4 = st.tabs(["📸 功能1: 看图出菜谱", "💬 功能2: 健康问答区", "⚖️ 功能3: 三餐热量精算", "🏘️ 功能4: 美食交流社区"])
 
 # ==========================================
 # 需求 1: 分析食材出菜谱
@@ -75,7 +93,7 @@ with tab1:
 
     with col1:
         uploaded_file = st.file_uploader("上传食材照片", type=['jpg', 'jpeg', 'png'])
-        user_preference = st.text_input("有什么特殊要求吗？（例如：要清淡点、川菜口味、不吃香菜）", placeholder="例如：我想吃辣的")
+        user_preference = st.text_input("有什么特殊要求吗？", placeholder="例如：我想吃辣的")
 
     with col2:
         if uploaded_file:
@@ -97,7 +115,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.subheader("👩‍⚕️ 你的私人营养学专家 24 小时在线")
-    question = st.text_area("你想问什么？（例如：熬夜后吃什么能快速恢复？喝黑咖啡真的能减肥吗？）", height=100)
+    question = st.text_area("你想问什么？", height=100)
 
     if st.button("💡 提交问题"):
         if not question:
@@ -115,7 +133,6 @@ with tab2:
 with tab3:
     st.subheader("📊 每日摄入精准测算与目标建议")
 
-    # 建立用户档案
     st.markdown("#### 1. 完善你的身体档案")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -128,16 +145,73 @@ with tab3:
         goal = st.selectbox("核心目标", ["减脂减肥", "增肌塑形", "维持现状", "改善三高"])
 
     st.markdown("#### 2. 记录你今天的三餐")
-    meals_input = st.text_area("请尽可能详细地描述（例如：早餐吃了两个水煮蛋和一杯燕麦奶；午餐吃了黄焖鸡米饭；晚餐吃了一根香蕉）", height=150)
+    meals_input = st.text_area("请详细描述你的三餐", height=150)
 
     if st.button("🔬 生成深度营养分析报告", type="primary"):
         if len(meals_input) < 5:
-            st.warning("请多写一点你吃的东西，不然 AI 没法算哦！")
+            st.warning("请多写一点你吃的东西！")
         else:
             with st.spinner("🧮 正在拆解五大营养素，计算热量差..."):
-                system_prompt = "你是一个专业营养管理师。请根据用户的身体数据和饮食记录，提供一份专业的报告。报告必须包含：1. 估算今天吃下的总热量（大卡）。2. 估算五大营养素（碳水、蛋白质、脂肪、维生素/矿物质、膳食纤维）的摄入比例。3. 基于用户的身体数据和【目标】，指出今天饮食的缺点，并给出明天怎么吃的具体建议。"
+                system_prompt = "你是一个专业营养管理师。请根据用户的身体数据和饮食记录，提供一份专业的报告。包含：1. 估算总热量。2. 五大营养素比例。3. 饮食缺点及明天建议。"
                 user_prompt = f"我的档案：性别{gender}，身高{height}cm，体重{weight}kg，目标是{goal}。我今天吃了这些：{meals_input}。"
-
                 report = ask_ai_text(system_prompt, user_prompt, api_key)
                 st.success("报告已生成！")
                 st.markdown(report)
+
+# ==========================================
+# 需求 4: 美食交流社区 (动态数据库支持)
+# ==========================================
+with tab4:
+    st.subheader("🏘️ 美食交流社区 - 发现身边的神仙食谱")
+
+    if not db_connected:
+        st.warning("等待数据库连接中...")
+    else:
+        # 1. 顶部发布区
+        with st.expander("✍️ 点击发布我的美食推荐 / 评价", expanded=True):
+            user_name = st.text_input("你的昵称", placeholder="例如：减脂小达人")
+            dish_name = st.text_input("推荐菜品 / 讨论话题", placeholder="例如：空气炸锅版无油鸡腿")
+            comment = st.text_area("你的评价或心得", placeholder="这道菜绝了，热量低还解馋！强烈推荐大家试试。")
+            
+            if st.button("🚀 发布内容", type="primary"):
+                if user_name and dish_name and comment:
+                    # 将数据写入数据库
+                    supabase.table('comments').insert({
+                        "user_name": user_name, 
+                        "dish_name": dish_name, 
+                        "comment": comment, 
+                        "likes": 0
+                    }).execute()
+                    st.success("发布成功！快去下方看看吧。")
+                    st.rerun() # 自动刷新网页显示最新留言
+                else:
+                    st.warning("⚠️ 昵称、菜品和评价都必须填写哦！")
+
+        st.markdown("---")
+        
+        # 2. 下方展示区与互动区
+        st.markdown("### 🌟 社区最新动态")
+        
+        try:
+            # 按照时间倒序拉取所有留言
+            response = supabase.table('comments').select("*").order('id', desc=True).execute()
+            comments_data = response.data
+
+            if not comments_data:
+                st.info("目前还没有人发布推荐，快来抢沙发吧！")
+            else:
+                for row in comments_data:
+                    with st.container():
+                        st.markdown(f"**🧑‍🍳 {row['user_name']}** 推荐了：***《{row['dish_name']}》***")
+                        st.write(f"💬 {row['comment']}")
+                        
+                        # 点赞按钮
+                        col1, col2 = st.columns([1, 10])
+                        with col1:
+                            if st.button(f"👍 赞 ({row['likes']})", key=f"like_{row['id']}"):
+                                new_likes = row['likes'] + 1
+                                supabase.table('comments').update({"likes": new_likes}).eq("id", row['id']).execute()
+                                st.rerun()
+                        st.markdown("---")
+        except Exception as e:
+            st.error(f"无法读取社区数据: {e}")
