@@ -68,7 +68,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # 【UI升级】隐藏式设置按钮
+    # 隐藏式设置按钮
     if st.button("⚙️ 显示/隐藏 偏好设置", use_container_width=True):
         st.session_state.show_settings = not st.session_state.show_settings
         st.rerun()
@@ -138,11 +138,10 @@ st.markdown("<h1 style='text-align: center; color: #1d1d1f; font-weight: 700; ma
 if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
     
     if st.session_state.current_page == "首页":
-        # 【黑科技】仅在首页注入“苹果风”卡片 CSS
+        # 【修复版黑科技】仅在首页主屏幕注入卡片 CSS，绝不干扰侧边栏
         st.markdown("""
         <style>
-        /* 将默认按钮改造成 Apple 风格的巨型悬浮卡片 */
-        div[data-testid="stButton"] > button {
+        section[data-testid="stMain"] div[data-testid="stButton"] > button {
             height: 220px !important;
             border-radius: 24px !important;
             background-color: #ffffff !important;
@@ -154,14 +153,12 @@ if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
             justify-content: center !important;
             align-items: center !important;
         }
-        /* 悬浮交互动效 */
-        div[data-testid="stButton"] > button:hover {
+        section[data-testid="stMain"] div[data-testid="stButton"] > button:hover {
             transform: translateY(-8px) scale(1.02) !important;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
             border-color: rgba(0, 113, 227, 0.3) !important;
         }
-        /* 卡片内文字排版 */
-        div[data-testid="stButton"] > button p {
+        section[data-testid="stMain"] div[data-testid="stButton"] > button p {
             font-size: 1.4rem !important;
             font-weight: 600 !important;
             color: #1d1d1f !important;
@@ -170,7 +167,6 @@ if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
         </style>
         """, unsafe_allow_html=True)
         
-        # 绘制 2x2 的巨型卡片网格
         col1, col2 = st.columns(2, gap="large")
         with col1:
             if st.button("🍳 AI 智能后厨\n\n看图做菜 · 健康答疑", use_container_width=True):
@@ -189,7 +185,6 @@ if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
                 st.rerun()
                 
     else:
-        # 进入具体功能页面，提供【返回】按钮
         if st.button("← 返回功能大厅"):
             st.session_state.current_page = "首页"
             st.rerun()
