@@ -5,22 +5,26 @@ import pandas as pd
 from datetime import datetime, date
 from supabase import create_client, Client
 
-# --- 0. 网页基础配置 ---
+# ==========================================
+# 0. 网页基本设置与隐藏全局水印
+# ==========================================
 st.set_page_config(page_title="AI 健康全生态", page_icon="🍎", layout="centered")
 
+# 全局隐藏顶部工具栏和底部官方水印 (更精准的隐藏，防误伤)
 st.markdown("""
     <style>
-    header {visibility: hidden !important;}
+    header[data-testid="stHeader"] {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stApp { background-color: #fcfcfd; }
     </style>
 """, unsafe_allow_html=True)
 
+# 状态管理
 if 'user' not in st.session_state: st.session_state.user = None
 if 'current_page' not in st.session_state: st.session_state.current_page = "首页"
-# 用于存储当前正在编辑的记录ID
 if 'editing_id' not in st.session_state: st.session_state.editing_id = None
 
+# 数据库连接
 @st.cache_resource
 def init_connection():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -32,26 +36,60 @@ except:
     st.error("数据库配置错误")
     st.stop()
 
-# --- 1. AI 调用工具 ---
+# ==========================================
+# 1. AI 引擎调用层
+# ==========================================
 def ask_ai_text(sys_p, usr_p):
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
     headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
     data = {"model": "qwen-plus", "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": usr_p}]}
     try:
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()['choices'][0]['message']['content']
+        return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
     except:
         return "0"
 
-# --- 2. 核心功能模块：健康管家 (升级版) ---
+def ask_ai_vision(img_bytes, prompt):
+    b64 = base64.b64encode(img_bytes).decode('utf-8')
+    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+    data = {"model": "qwen-vl-plus", "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}]}
+    try:
+        return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
+    except:
+        return "AI 视觉错误"
+
+# ==========================================
+# 2. 四大核心模块函数 (无省略，完整版)
+# ==========================================
+def module_ai_kitchen():
+    st.subheader("🍳 AI 智能后厨")
+    t1, t2 = st.tabs(["📸 看图出菜谱", "💬 营养师问答"])
+    with t1:
+        col_u, col_p = st.columns(2)
+        with col_u:
+            up = st.file_uploader("上传食材照", type=['jpg', 'png'])
+            pref = st.text_input("要求？", placeholder="例如：少油、快手菜")
+        if up: col_p.image(up)
+        if st.button("生成菜谱"): 
+            with st.spinner("AI 大厨思考中..."):
+                res = ask_ai_vision(up.getvalue(), f"识别食材，按要求 {pref} 给出菜谱")
+                st.session_state['last_rec'] = res
+                st.markdown(res)
+        if 'last_rec' in st.session_state and st.session_state.user:
+            if st.button("⭐️ 收藏此菜谱"):
+                supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['last_rec']}).execute()
+                st.success("已存入收藏夹")
+    with t2:
+        q = st.text_area("提问关于健康或饮食...")
+        if st.button("向营养师提问"):
+            st.info(ask_ai_text("你是一位专业营养师", q))
+
 def module_health_tracker():
     st.subheader("📈 健康数据管家")
     if not st.session_state.user: st.warning("⚠️ 请先返回首页登录"); return
     
-    tab1, tab2 = st.tabs(["📝 数据录入与管理", "📊 营养分析报告"])
-    
-    with tab1:
-        # --- A. 录入/修改窗口 ---
+    t1, t2 = st.tabs(["📝 数据录入与管理", "📊 营养分析报告"])
+    with t1:
         with st.form("diet_form", clear_on_submit=True):
             st.write("### 📅 今日打卡" if not st.session_state.editing_id else "### ✏️ 修改记录")
             c1, c2 = st.columns(2)
@@ -68,10 +106,8 @@ def module_health_tracker():
             
             if submitted:
                 with st.spinner("AI 正在根据您的食谱估算热量..."):
-                    # 请求 AI 计算总热量
-                    prompt = f"请根据以下三餐描述，估算总摄入卡路里：早餐：{b}；午餐：{l}；晚餐：{dn}。请仅返回一个整数数字。"
+                    prompt = f"请根据以下三餐描述，估算总摄入卡路里：早餐：{b}；午餐：{l}；晚餐：{dn}。请仅返回一个纯数字整数，不要包含任何单位或其他文字。"
                     cal_res = ask_ai_text("你是一个营养计算器", prompt)
-                    # 尝试转为整数，失败则默认为0
                     try:
                         final_cal = int(''.join(filter(str.isdigit, cal_res)))
                     except:
@@ -89,14 +125,13 @@ def module_health_tracker():
                     
                     if st.session_state.editing_id:
                         supabase.table('diet_logs').update(data_payload).eq('id', st.session_state.editing_id).execute()
-                        st.session_state.editing_id = None # 重置编辑状态
+                        st.session_state.editing_id = None
                         st.success("修改成功！")
                     else:
                         supabase.table('diet_logs').insert(data_payload).execute()
                         st.success(f"打卡成功！AI 估算今日总摄入：{final_cal} kcal")
                     st.rerun()
 
-        # --- B. 历史数据查询与管理 ---
         st.write("---")
         st.write("### 📂 历史记录管理")
         logs = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date', desc=True).execute().data
@@ -111,18 +146,16 @@ def module_health_tracker():
                     st.write(f"**晚：** {record.get('dinner', '无')}")
                     
                     col_edit, col_del = st.columns([1, 1])
-                    if col_edit.button("修改", key=f"edit_{record['id']}"):
+                    if col_edit.button("修改此记录", key=f"edit_{record['id']}"):
                         st.session_state.editing_id = record['id']
-                        st.info("已将数据回填至上方表单，请在上方修改后提交。")
-                        # 此处可以进一步增加数据回填逻辑
+                        st.rerun()
                     
-                    if col_del.button("删除", key=f"del_{record['id']}"):
+                    if col_del.button("删除此记录", key=f"del_{record['id']}"):
                         supabase.table('diet_logs').delete().eq('id', record['id']).execute()
                         st.success("记录已删除")
                         st.rerun()
 
     with tab2:
-        # (保持原有的报表逻辑，但可以调用新的结构化数据)
         logs = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date').execute().data
         if logs:
             df = pd.DataFrame(logs); df['log_date'] = pd.to_datetime(df['log_date']); df.set_index('log_date', inplace=True)
@@ -130,59 +163,35 @@ def module_health_tracker():
         else:
             st.info("暂无数据进行报表分析")
 
-# --- 模块路由与主页极简 UI (与上一版一致，仅路由 module_health_tracker) ---
-# ... (此处省略 A, C, D 模块的重复代码，结构保持不变)
+def module_community():
+    st.subheader("🏘️ 美食广场社区")
+    t1, t2 = st.tabs(["🔥 本周热力榜", "💬 交流大厅"])
+    with t1:
+        top = supabase.table('comments').select('*').order('likes', desc=True).limit(3).execute().data
+        cols = st.columns(3)
+        for i, p in enumerate(top): cols[i].success(f"🏆 NO.{i+1} {p['user_name']}\n\n{p['dish_name']}")
+    with t2:
+        if st.session_state.user:
+            with st.expander("✍️ 我要分享"):
+                tag = st.selectbox("标签", ["#日常", "#减脂", "#神仙菜"])
+                dish = st.text_input("标题")
+                cont = st.text_area("评价")
+                if st.button("发布"):
+                    supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute()
+                    st.rerun()
+        
+        posts = supabase.table('comments').select("*").order('id', desc=True).execute().data
+        for r in posts:
+            with st.container(border=True):
+                st.markdown(f"**🧑‍🍳 {r['user_name']}** ｜ 🏷️ {r['tag']}")
+                st.write(f"### {r['dish_name']}\n{r['comment']}")
+                liked = row_liked = r.get('liked_by') or []
+                if st.button(f"👍 {r['likes']}", key=f"l_{r['id']}", disabled=(st.session_state.user in liked)):
+                    liked.append(st.session_state.user)
+                    supabase.table('comments').update({"likes": r['likes']+1, "liked_by": liked}).eq("id", r['id']).execute()
+                    st.rerun()
 
-if st.session_state.current_page == "首页":
-    st.markdown("""
-        <style>
-        section[data-testid="stMain"] div.stButton > button[kind="primary"] {
-            height: 240px !important;
-            border-radius: 28px !important;
-            background-color: #ffffff !important;
-            border: 1px solid rgba(0,0,0,0.02) !important;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.05) !important;
-            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-        }
-        section[data-testid="stMain"] div.stButton > button[kind="primary"]:hover {
-            transform: translateY(-8px) scale(1.02) !important;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
-        }
-        section[data-testid="stMain"] div.stButton > button[kind="primary"] p {
-            font-size: 1.5rem !important;
-            font-weight: 600 !important;
-            color: #1d1d1f !important;
-            line-height: 1.4 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    c_title, c_log, c_set = st.columns([6, 2, 2])
-    with c_title:
-        st.markdown("<h2 style='color: #1d1d1f; margin-top:-10px;'>AI 健康全生态</h2>", unsafe_allow_html=True)
-    with c_log:
-        login_btn_text = f"👤 {st.session_state.user}" if st.session_state.user else "👤 登录"
-        if st.button(login_btn_text, use_container_width=True):
-            st.session_state.current_page = "登录"
-            st.rerun()
-    with c_set:
-        if st.button("⚙️ 设置", use_container_width=True):
-            st.session_state.current_page = "设置"
-            st.rerun()
-            
-    st.write("\n\n")
-
-    c1, c2 = st.columns(2, gap="large")
-    with c1:
-        if st.button("🍳 AI 智能后厨\n\n看图出菜 · 专家问答", type="primary", use_container_width=True): 
-            st.session_state.current_page = "A"; st.rerun()
-        # ... 其他卡片入口 ...
-        if st.button("🏘️ 美食广场社区\n\n热力排行 · 广场互动", type="primary", use_container_width=True): 
-            st.session_state.current_page = "C"; st.rerun()
-    with c2:
-        if st.button("📈 健康数据管家\n\n数据打卡 · AI 周报", type="primary", use_container_width=True): 
-            st.session_state.current_page = "B"; st.rerun()
-        if st.button("👤 我的专属主页\n\n发布记录 · 收藏中心", type="primary", use_container_width=True): 
-            st.session_state.current_page = "D"; st.rerun()
-
-# (后续登录、设置、各功能函数代码参考上文，只需确保 module_health_tracker 使用最新定义)
+def module_user_center():
+    st.subheader("👤 我的专属主页")
+    if not st.session_state.user: st.warning("⚠️ 请先返回首页登录"); return
+    t1, t2 = st.tabs(["📜 我的历史
