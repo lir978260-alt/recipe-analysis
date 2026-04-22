@@ -52,7 +52,7 @@ def ask_ai_vision(img_bytes, prompt):
     return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
 
 # ==========================================
-# 2. 四大核心模块函数 (全功能打通)
+# 2. 四大核心模块函数
 # ==========================================
 def module_ai_kitchen():
     st.subheader("🍳 AI 智能后厨")
@@ -63,7 +63,7 @@ def module_ai_kitchen():
             up = st.file_uploader("上传食材照", type=['jpg', 'png'])
             pref = st.text_input("要求？", placeholder="例如：少油、快手菜")
         if up: col_p.image(up)
-        if st.button("生成菜谱"): # 正常小按钮
+        if st.button("生成菜谱"): 
             with st.spinner("AI 大厨思考中..."):
                 res = ask_ai_vision(up.getvalue(), f"识别食材，按要求 {pref} 给出菜谱")
                 st.session_state['last_rec'] = res
@@ -121,4 +121,126 @@ def module_community():
         posts = supabase.table('comments').select("*").order('id', desc=True).execute().data
         for r in posts:
             with st.container(border=True):
-                st.markdown(f"**{r['user_
+                # 这里就是之前被截断的安全修复版代码：
+                st.markdown(f"**🧑‍🍳 {r['user_name']}** ｜ 🏷️ {r['tag']}")
+                st.write(f"### {r['dish_name']}\n{r['comment']}")
+                liked = row_liked = r.get('liked_by') or []
+                if st.button(f"👍 {r['likes']}", key=f"l_{r['id']}", disabled=(st.session_state.user in liked)):
+                    liked.append(st.session_state.user)
+                    supabase.table('comments').update({"likes": r['likes']+1, "liked_by": liked}).eq("id", r['id']).execute()
+                    st.rerun()
+
+def module_user_center():
+    st.subheader("👤 我的专属主页")
+    if not st.session_state.user: st.warning("⚠️ 请先返回首页登录"); return
+    t1, t2 = st.tabs(["📜 我的历史发布", "⭐ 个人收藏夹"])
+    with t1:
+        mp = supabase.table('comments').select('*').eq('author_username', st.session_state.user).execute().data
+        for p in mp: st.info(f"**{p['dish_name']}**\n{p['comment']}")
+    with t2:
+        favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).execute().data
+        for f in favs:
+            if f.get('recipe_content'):
+                with st.expander("📖 收藏的 AI 菜谱"): st.markdown(f['recipe_content'])
+
+# ==========================================
+# 3. 核心路由与主页极简 UI
+# ==========================================
+
+if st.session_state.current_page == "首页":
+    st.markdown("""
+        <style>
+        section[data-testid="stMain"] div.stButton > button[kind="primary"] {
+            height: 240px !important;
+            border-radius: 28px !important;
+            background-color: #ffffff !important;
+            border: 1px solid rgba(0,0,0,0.02) !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.05) !important;
+            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        }
+        section[data-testid="stMain"] div.stButton > button[kind="primary"]:hover {
+            transform: translateY(-8px) scale(1.02) !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+        }
+        section[data-testid="stMain"] div.stButton > button[kind="primary"] p {
+            font-size: 1.5rem !important;
+            font-weight: 600 !important;
+            color: #1d1d1f !important;
+            line-height: 1.4 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    c_title, c_log, c_set = st.columns([6, 2, 2])
+    with c_title:
+        st.markdown("<h2 style='color: #1d1d1f; margin-top:-10px;'>AI 健康全生态</h2>", unsafe_allow_html=True)
+    with c_log:
+        login_btn_text = f"👤 {st.session_state.user}" if st.session_state.user else "👤 登录"
+        if st.button(login_btn_text, use_container_width=True):
+            st.session_state.current_page = "登录"
+            st.rerun()
+    with c_set:
+        if st.button("⚙️ 设置", use_container_width=True):
+            st.session_state.current_page = "设置"
+            st.rerun()
+            
+    st.write("\n\n")
+
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        if st.button("🍳 AI 智能后厨\n\n看图出菜 · 专家问答", type="primary", use_container_width=True): 
+            st.session_state.current_page = "A"; st.rerun()
+        if st.button("🏘️ 美食广场社区\n\n热力排行 · 广场互动", type="primary", use_container_width=True): 
+            st.session_state.current_page = "C"; st.rerun()
+    with c2:
+        if st.button("📈 健康数据管家\n\n数据打卡 · AI 周报", type="primary", use_container_width=True): 
+            st.session_state.current_page = "B"; st.rerun()
+        if st.button("👤 我的专属主页\n\n发布记录 · 收藏中心", type="primary", use_container_width=True): 
+            st.session_state.current_page = "D"; st.rerun()
+
+elif st.session_state.current_page == "登录":
+    if st.button("← 返回首页"): st.session_state.current_page = "首页"; st.rerun()
+    st.markdown("---")
+    
+    if st.session_state.user:
+        st.success(f"当前在线账号：{st.session_state.user}")
+        if st.button("退出登录"): st.session_state.user = None; st.rerun()
+    else:
+        t1, t2 = st.tabs(["🔐 账号登录", "📝 注册新号"])
+        with t1:
+            un = st.text_input("用户名")
+            pw = st.text_input("密码", type="password")
+            if st.button("确认登录"):
+                if supabase.table('app_users').select('*').eq('username', un).eq('password', pw).execute().data:
+                    st.session_state.user = un; st.session_state.current_page = "首页"; st.rerun()
+                else: st.error("账号或密码错误")
+        with t2:
+            new_u = st.text_input("设置新账号")
+            new_p = st.text_input("设置密码", type="password")
+            if st.button("立即注册"):
+                if supabase.table('app_users').select('*').eq('username', new_u).execute().data:
+                    st.error("用户名已被占用")
+                else:
+                    supabase.table('app_users').insert({"username": new_u, "password": new_p}).execute()
+                    st.success("注册成功，请切换到登录页！")
+
+elif st.session_state.current_page == "设置":
+    if st.button("← 返回首页"): st.session_state.current_page = "首页"; st.rerun()
+    st.markdown("---")
+    st.subheader("⚙️ 系统设置与说明书")
+    st.info('''
+    **欢迎使用 AI 健康全生态！**
+    * **AI 后厨**：拍照识图生成专属菜谱，或向 AI 提问。
+    * **健康管家**：记录每日三餐与体重，生成 AI 营养周报。
+    * **美食广场**：浏览热门动态，给喜欢的食谱点赞。
+    * **我的主页**：管理你的发布记录与个人收藏夹。
+    ''')
+
+else:
+    if st.button("← 返回功能大厅"): st.session_state.current_page = "首页"; st.rerun()
+    st.markdown("---")
+    
+    if st.session_state.current_page == "A": module_ai_kitchen()
+    elif st.session_state.current_page == "B": module_health_tracker()
+    elif st.session_state.current_page == "C": module_community()
+    elif st.session_state.current_page == "D": module_user_center()
