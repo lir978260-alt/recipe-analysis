@@ -121,42 +121,4 @@ def module_community():
         posts = supabase.table('comments').select("*").order('id', desc=True).execute().data
         for r in posts:
             with st.container(border=True):
-                st.markdown(f"**{r['user_name']}** `{r['tag']}`")
-                st.write(f"### {r['dish_name']}\n{r['comment']}")
-                liked = row_liked = r.get('liked_by') or []
-                if st.button(f"👍 {r['likes']}", key=f"l_{r['id']}", disabled=(st.session_state.user in liked)):
-                    liked.append(st.session_state.user)
-                    supabase.table('comments').update({"likes": r['likes']+1, "liked_by": liked}).eq("id", r['id']).execute()
-                    st.rerun()
-
-def module_user_center():
-    st.subheader("👤 我的专属主页")
-    if not st.session_state.user: st.warning("⚠️ 请先返回首页登录"); return
-    t1, t2 = st.tabs(["📜 我的历史发布", "⭐ 个人收藏夹"])
-    with t1:
-        mp = supabase.table('comments').select('*').eq('author_username', st.session_state.user).execute().data
-        for p in mp: st.info(f"**{p['dish_name']}**\n{p['comment']}")
-    with t2:
-        favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).execute().data
-        for f in favs:
-            if f.get('recipe_content'):
-                with st.expander("📖 收藏的 AI 菜谱"): st.markdown(f['recipe_content'])
-
-# ==========================================
-# 3. 核心路由与主页极简 UI (苹果风大卡片)
-# ==========================================
-
-if st.session_state.current_page == "首页":
-    # 【黑科技CSS】：仅对 type="primary" 的按钮赋予苹果卡片样式
-    # 这样其他普通按钮（登录、返回等）就会保持正常的小尺寸！
-    st.markdown("""
-        <style>
-        section[data-testid="stMain"] div.stButton > button[kind="primary"] {
-            height: 240px !important;
-            border-radius: 28px !important;
-            background-color: #ffffff !important;
-            border: 1px solid rgba(0,0,0,0.02) !important;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.05) !important;
-            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-        }
-        section[data
+                st.markdown(f"**{r['user_
