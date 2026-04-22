@@ -8,19 +8,22 @@ from supabase import create_client, Client
 # ==========================================
 # 0. 网页基本设置与全局状态初始化
 # ==========================================
-st.set_page_config(page_title="AI 智能食谱与健康社区", page_icon="🥗", layout="centered")
+st.set_page_config(page_title="AI 健康社区", page_icon="🍎", layout="centered")
 
 # 初始化用户登录状态
 if 'user' not in st.session_state:
     st.session_state.user = None
-# 初始化网页排版偏好 (默认使用卡片网格布局)
+# 初始化网页排版偏好
 if 'layout_style' not in st.session_state:
     st.session_state.layout_style = "📱 卡片网格版 (推荐)"
-# 初始化当前页面路由 (针对卡片布局)
+# 初始化当前页面路由
 if 'current_page' not in st.session_state:
     st.session_state.current_page = "首页"
+# 初始化设置面板的隐藏/显示状态
+if 'show_settings' not in st.session_state:
+    st.session_state.show_settings = False
 
-# 数据库静默连接 (不向用户显示连接状态)
+# 数据库静默连接
 @st.cache_resource
 def init_connection():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -32,22 +35,22 @@ except Exception:
     st.stop()
 
 # ==========================================
-# 1. 侧边栏：纯净版用户中心 & 系统设置
+# 1. 侧边栏：纯净版用户中心 & 隐藏式设置
 # ==========================================
 with st.sidebar:
     st.header("👤 个人中心")
     if st.session_state.user:
-        st.success(f"欢迎您，{st.session_state.user}")
+        st.success(f"欢迎，{st.session_state.user}")
         if st.button("🚪 退出登录", use_container_width=True):
             st.session_state.user = None
             st.rerun()
     else:
-        st.info("登录后解锁完整功能")
+        st.info("登录后解锁完整生态")
         tab_login, tab_reg = st.tabs(["登录", "注册"])
         with tab_login:
             log_name = st.text_input("用户名", key="log_name")
             log_pwd = st.text_input("密码", type="password", key="log_pwd")
-            if st.button("登录系统", type="primary", use_container_width=True):
+            if st.button("登录", type="primary", use_container_width=True):
                 if supabase.table('app_users').select('*').eq('username', log_name).eq('password', log_pwd).execute().data:
                     st.session_state.user = log_name
                     st.rerun()
@@ -56,39 +59,41 @@ with st.sidebar:
         with tab_reg:
             reg_name = st.text_input("设置用户名", key="reg_name")
             reg_pwd = st.text_input("设置密码", type="password", key="reg_pwd")
-            if st.button("立即注册", use_container_width=True):
+            if st.button("注册", use_container_width=True):
                 if supabase.table('app_users').select('*').eq('username', reg_name).execute().data:
                     st.error("用户名已被占用")
                 else:
                     supabase.table('app_users').insert({"username": reg_name, "password": reg_pwd}).execute()
-                    st.success("注册成功，请登录！")
+                    st.success("注册成功！")
 
     st.markdown("---")
-    st.header("⚙️ 系统设置")
     
-    # 【UI核心】排版切换设置
-    new_style = st.selectbox("🖥️ 网页排版模式", ["📱 卡片网格版 (推荐)", "📑 传统标签页版"])
-    if new_style != st.session_state.layout_style:
-        st.session_state.layout_style = new_style
-        st.session_state.current_page = "首页" # 切换排版时强制回首页
+    # 【UI升级】隐藏式设置按钮
+    if st.button("⚙️ 显示/隐藏 偏好设置", use_container_width=True):
+        st.session_state.show_settings = not st.session_state.show_settings
         st.rerun()
         
-    # 【UI核心】系统说明书
-    with st.expander("📖 网站使用说明书"):
-        st.markdown("""
-        **欢迎来到 AI 健康社区！**
-        * **功能A [AI 后厨]**：上传冰箱食材照片，AI 会教你做菜；或者直接向 AI 提问健康问题。
-        * **功能B [健康管家]**：每天记录体重和吃了什么，累计 3 天可生成私人 AI 营养报告。
-        * **功能C [美食广场]**：分享你的减脂餐，给别人的食谱点赞。
-        * **功能D [我的主页]**：查看自己发过的帖子和收藏的神仙菜谱。
-        * *提示：如果觉得卡片排版不习惯，可以在上方设置中切换为标签页模式。*
+    if st.session_state.show_settings:
+        st.markdown("### 偏好设置")
+        new_style = st.selectbox("🖥️ 网页排版模式", ["📱 卡片网格版 (推荐)", "📑 传统标签页版"])
+        if new_style != st.session_state.layout_style:
+            st.session_state.layout_style = new_style
+            st.session_state.current_page = "首页" 
+            st.rerun()
+            
+        st.markdown("### 📖 产品说明书")
+        st.info("""
+        **探索四大生态：**
+        * **AI 后厨**：拍照识图生成专属菜谱，或向 AI 提问。
+        * **健康管家**：记录每日三餐与体重，生成 AI 营养周报。
+        * **美食广场**：浏览热门动态，给喜欢的食谱点赞。
+        * **我的主页**：管理你的发布记录与个人收藏夹。
         """)
 
 # ==========================================
 # 2. 团队开发模块区 (4人分工区域)
 # ==========================================
 def ask_ai(prompt, is_vision=False, image_bytes=None):
-    # (通用AI调用接口，队员直接调用，无需修改)
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
     headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
     if is_vision:
@@ -98,86 +103,106 @@ def ask_ai(prompt, is_vision=False, image_bytes=None):
         data = {"model": "qwen-plus", "messages": [{"role": "user", "content": prompt}]}
     return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
 
-# 👨‍💻 同学 A 的战场：AI 后厨
+# 👨‍💻 同学 A
 def module_ai_kitchen():
     st.header("🍳 AI 智能后厨")
     st.write("📸 小功能 1：看图出菜谱 | 💬 小功能 2：营养师问答")
-    # --- 同学A的代码写在下面 ---
-    file = st.file_uploader("上传食材照片找灵感")
-    if file and st.button("生成菜谱"):
-        st.info("这里是预留给 A 同学写 AI 视觉代码的地方")
+    st.info("同学 A：在此处粘贴你的代码")
 
-# 👨‍💻 同学 B 的战场：健康管家
+# 👨‍💻 同学 B
 def module_health_tracker():
     st.header("📈 健康管家")
     st.write("📝 小功能 1：每日打卡 | 📊 小功能 2：AI 营养周报")
     if not st.session_state.user: st.warning("请先登录！"); return
-    # --- 同学B的代码写在下面 ---
-    st.info("这里是预留给 B 同学写数据库录入和图表绘制代码的地方")
+    st.info("同学 B：在此处粘贴你的代码")
 
-# 👨‍💻 同学 C 的战场：美食社区
+# 👨‍💻 同学 C
 def module_community():
     st.header("🏘️ 美食广场")
     st.write("🔥 小功能 1：热力排行 | ✍️ 小功能 2：标签发帖")
     if not st.session_state.user: st.warning("请先登录！"); return
-    # --- 同学C的代码写在下面 ---
-    st.info("这里是预留给 C 同学写读取社区留言板和点赞逻辑的地方")
+    st.info("同学 C：在此处粘贴你的代码")
 
-# 👨‍💻 同学 D 的战场：个人中心
+# 👨‍💻 同学 D
 def module_user_center():
     st.header("👤 我的主页")
     st.write("⭐️ 小功能 1：我的收藏 | 📜 小功能 2：我的发布")
     if not st.session_state.user: st.warning("请先登录！"); return
-    # --- 同学D的代码写在下面 ---
-    st.info("这里是预留给 D 同学写查自己发过什么帖子的代码的地方")
-
+    st.info("同学 D：在此处粘贴你的代码")
 
 # ==========================================
-# 3. 前端 UI 核心路由系统 (根据设置渲染界面)
+# 3. 前端 UI 核心路由系统 (Apple Style 视觉注入)
 # ==========================================
-st.title("🥗 AI 智能食谱与健康社区")
+st.markdown("<h1 style='text-align: center; color: #1d1d1f; font-weight: 700; margin-bottom: 2rem;'>AI 健康全生态</h1>", unsafe_allow_html=True)
 
 if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
-    # --- 网格布局模式 ---
+    
     if st.session_state.current_page == "首页":
-        st.markdown("### 请选择你需要的功能")
-        st.write("") # 留白
+        # 【黑科技】仅在首页注入“苹果风”卡片 CSS
+        st.markdown("""
+        <style>
+        /* 将默认按钮改造成 Apple 风格的巨型悬浮卡片 */
+        div[data-testid="stButton"] > button {
+            height: 220px !important;
+            border-radius: 24px !important;
+            background-color: #ffffff !important;
+            border: 1px solid rgba(0,0,0,0.04) !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06) !important;
+            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        /* 悬浮交互动效 */
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-8px) scale(1.02) !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+            border-color: rgba(0, 113, 227, 0.3) !important;
+        }
+        /* 卡片内文字排版 */
+        div[data-testid="stButton"] > button p {
+            font-size: 1.4rem !important;
+            font-weight: 600 !important;
+            color: #1d1d1f !important;
+            line-height: 1.6 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        # 绘制 2x2 的矩形卡片
-        col1, col2 = st.columns(2)
+        # 绘制 2x2 的巨型卡片网格
+        col1, col2 = st.columns(2, gap="large")
         with col1:
-            if st.button("🍳 AI 智能后厨\n\n(看图做菜 / 健康答疑)", use_container_width=True):
+            if st.button("🍳 AI 智能后厨\n\n看图做菜 · 健康答疑", use_container_width=True):
                 st.session_state.current_page = "模块A"
                 st.rerun()
-            st.write("") # 留白
-            if st.button("🏘️ 美食广场社区\n\n(查看热门 / 分享食谱)", use_container_width=True):
+            if st.button("🏘️ 美食广场社区\n\n查看热门 · 分享食谱", use_container_width=True):
                 st.session_state.current_page = "模块C"
                 st.rerun()
                 
         with col2:
-            if st.button("📈 健康数据管家\n\n(每日打卡 / AI周报)", use_container_width=True):
+            if st.button("📈 健康数据管家\n\n每日打卡 · AI周报", use_container_width=True):
                 st.session_state.current_page = "模块B"
                 st.rerun()
-            st.write("") # 留白
-            if st.button("👤 我的专属主页\n\n(收藏夹 / 历史记录)", use_container_width=True):
+            if st.button("👤 我的专属主页\n\n收藏夹 · 历史记录", use_container_width=True):
                 st.session_state.current_page = "模块D"
                 st.rerun()
                 
     else:
-        # 进入具体功能页面，提供【返回主页】按钮
-        if st.button("🔙 返回功能大厅"):
+        # 进入具体功能页面，提供【返回】按钮
+        if st.button("← 返回功能大厅"):
             st.session_state.current_page = "首页"
             st.rerun()
         st.markdown("---")
         
-        # 根据当前页面路由，调用对应同学写的模块代码
+        # 路由分发
         if st.session_state.current_page == "模块A": module_ai_kitchen()
         elif st.session_state.current_page == "模块B": module_health_tracker()
         elif st.session_state.current_page == "模块C": module_community()
         elif st.session_state.current_page == "模块D": module_user_center()
 
 else:
-    # --- 传统标签页模式 (兼容老习惯) ---
+    # 传统标签页模式
     t1, t2, t3, t4 = st.tabs(["🍳 AI 后厨", "📈 健康管家", "🏘️ 美食社区", "👤 我的主页"])
     with t1: module_ai_kitchen()
     with t2: module_health_tracker()
