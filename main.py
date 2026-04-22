@@ -29,7 +29,7 @@ i18n = {
         "h_t": "📈 健康数据管家", "h_t1": "📝 数据录入", "h_t2": "📊 分析报告", "d": "选择日期", "w": "体重 (kg)",
         "b": "早餐记录", "l": "午餐记录", "dn": "晚餐记录", "sub": "提交并计算热量", "del": "删除", "edit": "修改",
         "c_t": "🏘️ 美食广场社区", "c_t1": "🔥 热力榜", "c_t2": "💬 交流大厅", "pub": "🚀 发布动态", "like": "赞",
-        "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容",
+        "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容", "log_req": "⚠️ 请先登录",
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
         "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据"
     },
@@ -43,7 +43,7 @@ i18n = {
         "h_t": "📈 Health Tracker", "h_t1": "📝 Data Entry", "h_t2": "📊 Analytics", "d": "Date", "w": "Weight (kg)",
         "b": "Breakfast Log", "l": "Lunch Log", "dn": "Dinner Log", "sub": "Submit & Calc Calories", "del": "Delete", "edit": "Edit",
         "c_t": "🏘️ Community Square", "c_t1": "🔥 Trending", "c_t2": "💬 Discussion", "pub": "🚀 Publish", "like": "Like",
-        "tag": "Select Tag", "title_in": "Enter Title", "desc_in": "Enter Details",
+        "tag": "Select Tag", "title_in": "Enter Title", "desc_in": "Enter Details", "log_req": "⚠️ Please login first",
         "u_t": "👤 My Profile", "u_t1": "📜 My Posts", "u_t2": "⭐ Favorites",
         "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available"
     }
@@ -86,15 +86,11 @@ try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except: st.error("Database connection failed."); st.stop()
 
 # ==========================================
-# 3. 极速 AI 引擎调用层 (加入底层语言锁与模型切换)
+# 3. 极速 AI 引擎调用层
 # ==========================================
 def ask_ai(sys_p, usr_p, img=None):
-    # 【核心修复 1】强制语言锁：利用底层指令逼迫 AI 输出对应的语言
     sys_p += f" You must explicitly format and output your entire response in {t['sys_lang']}."
-    
-    # 【核心修复 2】智能切换极速模型：文本用 turbo，视觉用 vl-plus
     model = "qwen-vl-plus" if img else "qwen-turbo"
-    
     url, h = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
     msg = [{"type": "text", "text": usr_p}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}}] if img else usr_p
     data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg}]} if not img else {"model": model, "messages": [{"role": "user", "content": msg}]}
@@ -102,7 +98,7 @@ def ask_ai(sys_p, usr_p, img=None):
     except Exception as e: return f"AI Error: {str(e)}"
 
 # ==========================================
-# 4. 四大核心模块函数 (全面植入字典引擎)
+# 4. 四大核心模块函数
 # ==========================================
 def m_kitchen():
     st.subheader(t['k_t'])
@@ -118,7 +114,6 @@ def m_kitchen():
         if st.session_state.get('l_rec') and st.session_state.user and st.button(t['fav']):
             supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['l_rec']}).execute(); st.success(t['suc'])
     with t2:
-        # 【核心修复 3】营养师加入图像识别功能
         up_nutri = st.file_uploader(t['up_opt'], type=['jpg', 'png'], key="f2")
         if up_nutri: st.image(up_nutri, width=300)
         q = st.text_area(t['ask'])
@@ -127,8 +122,12 @@ def m_kitchen():
                 st.info(ask_ai("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None))
 
 def m_health():
+    # 【核心修复 1】：自动路由拦截！没登录直接跳登录页，绝不卡死在这里。
+    if not st.session_state.user: 
+        st.session_state.current_page = "Login"
+        st.rerun()
+        
     st.subheader(t['h_t'])
-    if not st.session_state.user: return st.warning(t['err'])
     t1, t2 = st.tabs([t['h_t1'], t['h_t2']])
     with t1:
         with st.form("d_form", clear_on_submit=True):
@@ -166,17 +165,40 @@ def m_community():
             with st.expander(t['pub']):
                 tag, dish, cont = st.selectbox(t['tag'], ["#Daily", "#Diet", "#Yummy"] if t['sys_lang']=="English" else ["#日常", "#减脂", "#神仙菜"]), st.text_input(t['title_in']), st.text_area(t['desc_in'])
                 if st.button("OK") and dish:
-                    supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute(); st.rerun()
+                    try:
+                        supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute()
+                        st.rerun()
+                    except: pass
+        else:
+            st.info(t['log_req'])
+
         for r in supabase.table('comments').select("*").order('id', desc=True).execute().data:
             with st.container(border=True):
                 st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
-                lk = r.get('liked_by') or []
-                if st.button(f"{t['like']} ({r['likes']})", key=f"l_{r['id']}", disabled=(st.session_state.user in lk)):
-                    lk.append(st.session_state.user); supabase.table('comments').update({"likes": r['likes']+1, "liked_by": lk}).eq("id", r['id']).execute(); st.rerun()
+                
+                # 【核心修复 2】：装甲级 Type Guard (类型防呆设计)
+                # 无论数据库返回 None、字符串还是乱码，这里统统强制格式化为 List，绝不报错
+                lk = r.get('liked_by')
+                if not isinstance(lk, list): lk = [] 
+                
+                # 安全判断：未登录则为 False，避免 NoneType 报错
+                has_liked = (st.session_state.user in lk) if st.session_state.user else False
+                
+                # 如果没登录，点赞按钮直接置灰 (disabled)
+                if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
+                    lk.append(st.session_state.user)
+                    try:
+                        supabase.table('comments').update({"likes": int(r.get('likes', 0))+1, "liked_by": lk}).eq("id", r['id']).execute()
+                        st.rerun()
+                    except: pass # 静默容错，防并发崩溃
 
 def m_user():
+    # 【核心修复 1】：自动路由拦截！
+    if not st.session_state.user: 
+        st.session_state.current_page = "Login"
+        st.rerun()
+        
     st.subheader(t['u_t'])
-    if not st.session_state.user: return st.warning(t['err'])
     t1, t2 = st.tabs([t['u_t1'], t['u_t2']])
     with t1:
         for p in supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data: st.info(f"**{p['dish_name']}**\n{p['comment']}")
