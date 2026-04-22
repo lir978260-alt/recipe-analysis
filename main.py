@@ -5,261 +5,181 @@ import pandas as pd
 from datetime import datetime, date
 from supabase import create_client, Client
 
-# --- 1. 网页基本设置 ---
-st.set_page_config(page_title="AI 智能食谱与健康社区", page_icon="🥗", layout="wide")
-st.title("🥗 AI 智能食谱与健康社区 (V2.0)")
+# ==========================================
+# 0. 网页基本设置与全局状态初始化
+# ==========================================
+st.set_page_config(page_title="AI 智能食谱与健康社区", page_icon="🥗", layout="centered")
 
-# --- 2. 初始化全局状态 ---
+# 初始化用户登录状态
 if 'user' not in st.session_state:
     st.session_state.user = None
+# 初始化网页排版偏好 (默认使用卡片网格布局)
+if 'layout_style' not in st.session_state:
+    st.session_state.layout_style = "📱 卡片网格版 (推荐)"
+# 初始化当前页面路由 (针对卡片布局)
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "首页"
 
+# 数据库静默连接 (不向用户显示连接状态)
 @st.cache_resource
 def init_connection():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-
 try:
-    supabase: Client = init_connection()
-    db_connected = True
+    supabase = init_connection()
+    api_key = st.secrets["ALIYUN_API_KEY"]
 except Exception:
-    db_connected = False
+    st.error("系统维护中，请联系管理员配置云端秘钥。")
+    st.stop()
 
-# --- 3. 侧边栏：用户中心 ---
+# ==========================================
+# 1. 侧边栏：纯净版用户中心 & 系统设置
+# ==========================================
 with st.sidebar:
-    st.header("🔐 用户中心")
+    st.header("👤 个人中心")
     if st.session_state.user:
-        st.success(f"👤 欢迎回来：{st.session_state.user}")
-        if st.button("退出登录"):
+        st.success(f"欢迎您，{st.session_state.user}")
+        if st.button("🚪 退出登录", use_container_width=True):
             st.session_state.user = None
             st.rerun()
     else:
-        tab_login, tab_reg = st.tabs(["快速登录", "注册新号"])
+        st.info("登录后解锁完整功能")
+        tab_login, tab_reg = st.tabs(["登录", "注册"])
         with tab_login:
             log_name = st.text_input("用户名", key="log_name")
             log_pwd = st.text_input("密码", type="password", key="log_pwd")
             if st.button("登录系统", type="primary", use_container_width=True):
-                res = supabase.table('app_users').select('*').eq('username', log_name).eq('password', log_pwd).execute()
-                if res.data:
+                if supabase.table('app_users').select('*').eq('username', log_name).eq('password', log_pwd).execute().data:
                     st.session_state.user = log_name
                     st.rerun()
                 else:
-                    st.error("❌ 账号或密码错误！")
+                    st.error("账号或密码错误")
         with tab_reg:
             reg_name = st.text_input("设置用户名", key="reg_name")
             reg_pwd = st.text_input("设置密码", type="password", key="reg_pwd")
             if st.button("立即注册", use_container_width=True):
-                exist = supabase.table('app_users').select('*').eq('username', reg_name).execute()
-                if exist.data:
-                    st.error("⚠️ 用户名已被注册！")
+                if supabase.table('app_users').select('*').eq('username', reg_name).execute().data:
+                    st.error("用户名已被占用")
                 else:
                     supabase.table('app_users').insert({"username": reg_name, "password": reg_pwd}).execute()
-                    st.success("✅ 注册成功！请切换到【快速登录】页登录。")
+                    st.success("注册成功，请登录！")
 
     st.markdown("---")
-    try:
-        api_key = st.secrets["ALIYUN_API_KEY"]
-        st.success("✅ AI 引擎全功率运行中")
-    except Exception:
-        api_key = ""
-        st.error("⚠️ AI 秘钥缺失")
+    st.header("⚙️ 系统设置")
+    
+    # 【UI核心】排版切换设置
+    new_style = st.selectbox("🖥️ 网页排版模式", ["📱 卡片网格版 (推荐)", "📑 传统标签页版"])
+    if new_style != st.session_state.layout_style:
+        st.session_state.layout_style = new_style
+        st.session_state.current_page = "首页" # 切换排版时强制回首页
+        st.rerun()
+        
+    # 【UI核心】系统说明书
+    with st.expander("📖 网站使用说明书"):
+        st.markdown("""
+        **欢迎来到 AI 健康社区！**
+        * **功能A [AI 后厨]**：上传冰箱食材照片，AI 会教你做菜；或者直接向 AI 提问健康问题。
+        * **功能B [健康管家]**：每天记录体重和吃了什么，累计 3 天可生成私人 AI 营养报告。
+        * **功能C [美食广场]**：分享你的减脂餐，给别人的食谱点赞。
+        * **功能D [我的主页]**：查看自己发过的帖子和收藏的神仙菜谱。
+        * *提示：如果觉得卡片排版不习惯，可以在上方设置中切换为标签页模式。*
+        """)
 
-# --- 4. AI 引擎函数 ---
-def ask_ai_text(system_prompt, user_prompt, key):
+# ==========================================
+# 2. 团队开发模块区 (4人分工区域)
+# ==========================================
+def ask_ai(prompt, is_vision=False, image_bytes=None):
+    # (通用AI调用接口，队员直接调用，无需修改)
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    headers = {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
-    data = {"model": "qwen-plus", "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]}
-    try:
-        return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ AI 开小差了: {str(e)}"
-
-def ask_ai_vision(image_bytes, user_prompt, key):
-    base64_image = base64.b64encode(image_bytes).decode('utf-8')
-    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    headers = {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
-    data = {"model": "qwen-vl-plus", "messages": [{"role": "user", "content": [{"type": "text", "text": user_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}]}]}
-    try:
-        return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ 视觉系统错误: {str(e)}"
-
-# --- 5. 核心界面划分 ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📸 看图出菜谱", "💬 健康问答区", "📈 饮食与体重追踪", "🏘️ 互动社区", "👤 我的主页"])
-
-# ==========================================
-# Tab 1: 看图出菜谱 (+ 收藏功能)
-# ==========================================
-with tab1:
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        uploaded_file = st.file_uploader("上传食材照片", type=['jpg', 'jpeg', 'png'])
-        user_preference = st.text_input("有什么特殊要求吗？", placeholder="例如：我想吃辣的")
-    with col2:
-        if uploaded_file: st.image(uploaded_file, use_container_width=True)
-
-    if st.button("🍳 开始生成专属菜谱", type="primary"):
-        if not uploaded_file:
-            st.warning("请先上传一张食材照片！")
-        else:
-            with st.spinner("👨‍🍳 AI 厨师正在思考..."):
-                prompt = f"识别图片食材，根据要求：【{user_preference}】，给出 2 种菜谱。包含：菜名、营养、步骤。"
-                result = ask_ai_vision(uploaded_file.getvalue(), prompt, api_key)
-                st.session_state['last_recipe'] = result # 暂存下来用于收藏
-                st.markdown(result)
-                
-    if 'last_recipe' in st.session_state and st.session_state.user:
-        if st.button("⭐️ 保存这篇食谱到我的主页"):
-            supabase.table('favorites').insert({"username": st.session_state.user, "recipe_name": "AI 智能菜谱", "recipe_content": st.session_state['last_recipe']}).execute()
-            st.success("✅ 收藏成功！去【👤 我的主页】查看吧！")
-
-# ==========================================
-# Tab 2: 健康问答区
-# ==========================================
-with tab2:
-    question = st.text_area("你想问什么健康问题？", height=100)
-    if st.button("💡 提交问题"):
-        if question:
-            with st.spinner("正在查阅文献..."):
-                ans = ask_ai_text("你是一位专业的注册营养师（RD）。", question, api_key)
-                st.markdown(ans)
-
-# ==========================================
-# Tab 3: 饮食与体重追踪
-# ==========================================
-with tab3:
-    if not st.session_state.user:
-        st.warning("⚠️ 追踪记录和生成周报功能需要登录后使用！")
+    headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+    if is_vision:
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        data = {"model": "qwen-vl-plus", "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}]}]}
     else:
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.subheader("📝 今日打卡")
-            log_date = st.date_input("日期", value=date.today())
-            weight = st.number_input("今日空腹体重 (kg)", value=60.0, step=0.1)
-            calories = st.number_input("今日总摄入预估 (千卡)", value=1500, step=50)
-            meals = st.text_area("三餐记录(可选)", placeholder="例如：早：水煮蛋；中：沙拉...")
-            if st.button("✅ 记录今日数据", type="primary"):
-                existing = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).eq('log_date', str(log_date)).execute()
-                if existing.data:
-                    supabase.table('diet_logs').update({"weight": weight, "calories": calories, "meals_record": meals}).eq('id', existing.data[0]['id']).execute()
-                else:
-                    supabase.table('diet_logs').insert({"username": st.session_state.user, "log_date": str(log_date), "weight": weight, "calories": calories, "meals_record": meals}).execute()
-                st.success("记录成功！")
+        data = {"model": "qwen-plus", "messages": [{"role": "user", "content": prompt}]}
+    return requests.post(url, headers=headers, json=data).json()['choices'][0]['message']['content']
 
-        with c2:
-            st.subheader("📊 我的趋势")
-            logs = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date').execute().data
-            if logs:
-                df = pd.DataFrame(logs)
-                df['log_date'] = pd.to_datetime(df['log_date'])
-                df.set_index('log_date', inplace=True)
+# 👨‍💻 同学 A 的战场：AI 后厨
+def module_ai_kitchen():
+    st.header("🍳 AI 智能后厨")
+    st.write("📸 小功能 1：看图出菜谱 | 💬 小功能 2：营养师问答")
+    # --- 同学A的代码写在下面 ---
+    file = st.file_uploader("上传食材照片找灵感")
+    if file and st.button("生成菜谱"):
+        st.info("这里是预留给 A 同学写 AI 视觉代码的地方")
+
+# 👨‍💻 同学 B 的战场：健康管家
+def module_health_tracker():
+    st.header("📈 健康管家")
+    st.write("📝 小功能 1：每日打卡 | 📊 小功能 2：AI 营养周报")
+    if not st.session_state.user: st.warning("请先登录！"); return
+    # --- 同学B的代码写在下面 ---
+    st.info("这里是预留给 B 同学写数据库录入和图表绘制代码的地方")
+
+# 👨‍💻 同学 C 的战场：美食社区
+def module_community():
+    st.header("🏘️ 美食广场")
+    st.write("🔥 小功能 1：热力排行 | ✍️ 小功能 2：标签发帖")
+    if not st.session_state.user: st.warning("请先登录！"); return
+    # --- 同学C的代码写在下面 ---
+    st.info("这里是预留给 C 同学写读取社区留言板和点赞逻辑的地方")
+
+# 👨‍💻 同学 D 的战场：个人中心
+def module_user_center():
+    st.header("👤 我的主页")
+    st.write("⭐️ 小功能 1：我的收藏 | 📜 小功能 2：我的发布")
+    if not st.session_state.user: st.warning("请先登录！"); return
+    # --- 同学D的代码写在下面 ---
+    st.info("这里是预留给 D 同学写查自己发过什么帖子的代码的地方")
+
+
+# ==========================================
+# 3. 前端 UI 核心路由系统 (根据设置渲染界面)
+# ==========================================
+st.title("🥗 AI 智能食谱与健康社区")
+
+if st.session_state.layout_style == "📱 卡片网格版 (推荐)":
+    # --- 网格布局模式 ---
+    if st.session_state.current_page == "首页":
+        st.markdown("### 请选择你需要的功能")
+        st.write("") # 留白
+        
+        # 绘制 2x2 的矩形卡片
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🍳 AI 智能后厨\n\n(看图做菜 / 健康答疑)", use_container_width=True):
+                st.session_state.current_page = "模块A"
+                st.rerun()
+            st.write("") # 留白
+            if st.button("🏘️ 美食广场社区\n\n(查看热门 / 分享食谱)", use_container_width=True):
+                st.session_state.current_page = "模块C"
+                st.rerun()
                 
-                tab_w, tab_c = st.tabs(["📉 体重曲线", "🔥 热量曲线"])
-                with tab_w: st.line_chart(df['weight'], color="#FF4B4B")
-                with tab_c: st.line_chart(df['calories'], color="#0068C9")
-            else:
-                st.info("暂无数据，快去左侧打卡吧！")
-
+        with col2:
+            if st.button("📈 健康数据管家\n\n(每日打卡 / AI周报)", use_container_width=True):
+                st.session_state.current_page = "模块B"
+                st.rerun()
+            st.write("") # 留白
+            if st.button("👤 我的专属主页\n\n(收藏夹 / 历史记录)", use_container_width=True):
+                st.session_state.current_page = "模块D"
+                st.rerun()
+                
+    else:
+        # 进入具体功能页面，提供【返回主页】按钮
+        if st.button("🔙 返回功能大厅"):
+            st.session_state.current_page = "首页"
+            st.rerun()
         st.markdown("---")
-        st.subheader("🤖 AI 营养师周报")
-        if st.button("生成近期饮食『红黑榜』诊断书"):
-            if len(logs) < 3:
-                st.warning("数据太少啦，至少需要打卡 3 天才能生成精准报告哦！")
-            else:
-                with st.spinner("AI 正在深度分析你最近的饮食结构和体重变化..."):
-                    logs_str = "\n".join([f"日期:{r['log_date']}, 体重:{r['weight']}kg, 摄入:{r['calories']}kcal, 饮食:{r['meals_record']}" for r in logs[-7:]])
-                    prompt = f"你是严厉但专业的AI营养师。这是用户最近几天的数据：\n{logs_str}\n请给出一份周报，包含：1.体重与热量趋势分析。2.饮食红黑榜。3.下周实操建议。语气活泼犀利。"
-                    report = ask_ai_text("你是一个顶尖营养师", prompt, api_key)
-                    st.markdown(report)
-
-# ==========================================
-# Tab 4: 互动社区
-# ==========================================
-with tab4:
-    if st.session_state.user is None:
-        st.warning("⚠️ 登录后解锁发帖、点赞与收藏功能！")
-    
-    st.markdown("### 🔥 本周最热榜")
-    top_posts = supabase.table('comments').select('*').order('likes', desc=True).limit(3).execute().data
-    if top_posts:
-        cols = st.columns(3)
-        medals = ["🥇", "🥈", "🥉"]
-        for idx, col in enumerate(cols):
-            if idx < len(top_posts):
-                with col:
-                    st.info(f"{medals[idx]} **{top_posts[idx]['user_name']}**\n\n《{top_posts[idx]['dish_name']}》\n\n👍 {top_posts[idx]['likes']} 赞")
-    
-    st.markdown("---")
-
-    if st.session_state.user:
-        with st.expander("✍️ 发布新动态", expanded=False):
-            tag_choice = st.selectbox("选择标签", ["#日常分享", "#减脂期神仙菜", "#宿舍党快手菜", "#欺骗餐警报"])
-            dish_name = st.text_input("菜品 / 标题")
-            comment = st.text_area("内容")
-            if st.button("🚀 马上发布"):
-                if dish_name and comment:
-                    supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish_name, "comment": comment, "likes": 0, "liked_by": [], "tag": tag_choice}).execute()
-                    st.success("发布成功！")
-                    st.rerun()
-
-    st.markdown("### 🌟 最新动态")
-    filter_tag = st.radio("筛选板块", ["全部", "#日常分享", "#减脂期神仙菜", "#宿舍党快手菜", "#欺骗餐警报"], horizontal=True)
-    
-    query = supabase.table('comments').select("*").order('id', desc=True)
-    if filter_tag != "全部":
-        query = query.eq('tag', filter_tag)
         
-    comments_data = query.execute().data
+        # 根据当前页面路由，调用对应同学写的模块代码
+        if st.session_state.current_page == "模块A": module_ai_kitchen()
+        elif st.session_state.current_page == "模块B": module_health_tracker()
+        elif st.session_state.current_page == "模块C": module_community()
+        elif st.session_state.current_page == "模块D": module_user_center()
 
-    for row in comments_data:
-        with st.container(border=True):
-            st.markdown(f"**🧑‍🍳 {row['user_name']}** `{row.get('tag', '#日常分享')}`\n### {row['dish_name']}")
-            st.write(f"{row['comment']}")
-            
-            c1, c2, c3 = st.columns([2, 2, 8])
-            liked_by_list = row.get('liked_by') or []
-            has_liked = st.session_state.user in liked_by_list if st.session_state.user else False
-            
-            with c1:
-                if st.button(f"💖 已赞({row['likes']})" if has_liked else f"👍 赞({row['likes']})", key=f"lk_{row['id']}", disabled=(not st.session_state.user or has_liked)):
-                    new_likes = row['likes'] + 1
-                    liked_by_list.append(st.session_state.user)
-                    supabase.table('comments').update({"likes": new_likes, "liked_by": liked_by_list}).eq("id", row['id']).execute()
-                    st.rerun()
-                    
-            with c2:
-                if st.session_state.user:
-                    is_fav = supabase.table('favorites').select('id').eq('username', st.session_state.user).eq('post_id', row['id']).execute().data
-                    if st.button("⭐️ 已收藏" if is_fav else "⭐ 收藏", key=f"fv_{row['id']}", disabled=bool(is_fav)):
-                        supabase.table('favorites').insert({"username": st.session_state.user, "post_id": row['id']}).execute()
-                        st.rerun()
-
-# ==========================================
-# Tab 5: 个人主页
-# ==========================================
-with tab5:
-    if not st.session_state.user:
-        st.warning("⚠️ 登录后即可查看个人主页！")
-    else:
-        st.header(f"👑 {st.session_state.user} 的主页")
-        t_mine, t_fav = st.tabs(["✍️ 我发布的", "⭐️ 我的收藏"])
-        
-        with t_mine:
-            my_posts = supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data
-            if my_posts:
-                for p in my_posts:
-                    st.info(f"**《{p['dish_name']}》** | 👍 {p['likes']} 赞 \n\n {p['comment']}")
-            else:
-                st.write("还没发布过动态哦~")
-                
-        with t_fav:
-            favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).order('id', desc=True).execute().data
-            if favs:
-                for f in favs:
-                    if f.get('post_id'):
-                        post = supabase.table('comments').select('dish_name', 'user_name').eq('id', f['post_id']).execute().data
-                        if post:
-                            st.success(f"📌 收藏了 **{post[0]['user_name']}** 的帖子：**《{post[0]['dish_name']}》**")
-                    elif f.get('recipe_content'):
-                        with st.expander(f"📖 收藏的AI菜谱 (保存于 {f['created_at'][:10]})"):
-                            st.markdown(f['recipe_content'])
-            else:
-                st.write("收藏夹空空如也~去社区逛逛吧！")
+else:
+    # --- 传统标签页模式 (兼容老习惯) ---
+    t1, t2, t3, t4 = st.tabs(["🍳 AI 后厨", "📈 健康管家", "🏘️ 美食社区", "👤 我的主页"])
+    with t1: module_ai_kitchen()
+    with t2: module_health_tracker()
+    with t3: module_community()
+    with t4: module_user_center()
