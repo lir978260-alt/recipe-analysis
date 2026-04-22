@@ -16,7 +16,7 @@ if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Ap
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 
 # ==========================================
-# 1. 终极双语字典引擎 (i18n)
+# 1. 终极双语字典引擎 (i18n) - 补全所有死角
 # ==========================================
 i18n = {
     "🇨🇳 简体中文": {
@@ -31,7 +31,8 @@ i18n = {
         "c_t": "🏘️ 美食广场社区", "c_t1": "🔥 热力榜", "c_t2": "💬 交流大厅", "pub": "🚀 发布动态", "like": "赞",
         "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容", "log_req": "⚠️ 请先登录",
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
-        "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据"
+        "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据",
+        "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "AI Health Ecosystem", "login": "Login", "set": "Settings", "back": "Back to Home",
@@ -45,13 +46,14 @@ i18n = {
         "c_t": "🏘️ Community Square", "c_t1": "🔥 Trending", "c_t2": "💬 Discussion", "pub": "🚀 Publish", "like": "Like",
         "tag": "Select Tag", "title_in": "Enter Title", "desc_in": "Enter Details", "log_req": "⚠️ Please login first",
         "u_t": "👤 My Profile", "u_t1": "📜 My Posts", "u_t2": "⭐ Favorites",
-        "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available"
+        "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available",
+        "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm"
     }
 }
 t = i18n[st.session_state.lang]
 
 # ==========================================
-# 2. 动态主题 CSS 引擎
+# 2. 动态主题 CSS 引擎 (彻底修复禁用按钮黑框与文字颜色)
 # ==========================================
 theme_colors = {
     "🍎 苹果白 (Apple Light)": {"bg": "#fcfcfd", "card": "#ffffff", "text": "#1d1d1f"},
@@ -62,13 +64,29 @@ c = theme_colors[st.session_state.theme]
 
 st.markdown(f"""
     <style>
+    /* 隐藏官方痕迹 */
     header[data-testid="stHeader"], footer {{visibility: hidden !important;}}
-    .stApp {{ background-color: {c['bg']} !important; }}
-    h1, h2, h3, h4, h5, h6, p, span, label {{ color: {c['text']} !important; }}
+    
+    /* 强制全局背景色与所有文字颜色跟随主题 */
+    .stApp, .stApp > header {{ background-color: {c['bg']} !important; }}
+    h1, h2, h3, h4, h5, h6, p, span, label, div[data-testid="stMarkdownContainer"] {{ color: {c['text']} !important; }}
+    
+    /* 修复普通按钮的字体颜色 */
+    div[data-testid="stButton"] > button {{ color: {c['text']} !important; border-color: rgba(150,150,150,0.3) !important; }}
+    
+    /* 【核心修复】彻底解决已点赞(禁用)按钮变黑、变糊的问题 */
+    div[data-testid="stButton"] > button:disabled {{
+        background-color: transparent !important;
+        color: {c['text']} !important;
+        opacity: 0.4 !important;
+        border: 1px solid rgba(150,150,150,0.2) !important;
+    }}
+    
+    /* 巨型大卡片样式 */
     section[data-testid="stMain"] div.stButton > button[kind="primary"] {{
         height: 240px !important; border-radius: 28px !important; background-color: {c['card']} !important;
         border: 1px solid rgba(0,0,0,0.04) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
-        transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important; opacity: 1 !important;
     }}
     section[data-testid="stMain"] div.stButton > button[kind="primary"]:hover {{
         transform: translateY(-8px) scale(1.02) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
@@ -86,7 +104,7 @@ try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except: st.error("Database connection failed."); st.stop()
 
 # ==========================================
-# 3. 极速 AI 引擎调用层
+# 3. 极速 AI 引擎调用层 (防拥塞优化)
 # ==========================================
 def ask_ai(sys_p, usr_p, img=None):
     sys_p += f" You must explicitly format and output your entire response in {t['sys_lang']}."
@@ -94,8 +112,10 @@ def ask_ai(sys_p, usr_p, img=None):
     url, h = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
     msg = [{"type": "text", "text": usr_p}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}}] if img else usr_p
     data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg}]} if not img else {"model": model, "messages": [{"role": "user", "content": msg}]}
-    try: return requests.post(url, headers=h, json=data).json()['choices'][0]['message']['content']
-    except Exception as e: return f"AI Error: {str(e)}"
+    try: 
+        res = requests.post(url, headers=h, json=data, timeout=25) # 增加超时断开，防 WebSocket 假死
+        return res.json()['choices'][0]['message']['content']
+    except Exception as e: return f"AI Network Error: {str(e)}"
 
 # ==========================================
 # 4. 四大核心模块函数
@@ -117,15 +137,13 @@ def m_kitchen():
         up_nutri = st.file_uploader(t['up_opt'], type=['jpg', 'png'], key="f2")
         if up_nutri: st.image(up_nutri, width=300)
         q = st.text_area(t['ask'])
-        if st.button(t['sub'] if t['sys_lang']=="简体中文" else "Submit") and q:
+        if st.button(t['confirm']) and q:
             with st.spinner(t['think']):
                 st.info(ask_ai("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None))
 
 def m_health():
-    # 【核心修复 1】：自动路由拦截！没登录直接跳登录页，绝不卡死在这里。
     if not st.session_state.user: 
-        st.session_state.current_page = "Login"
-        st.rerun()
+        st.session_state.current_page = "Login"; st.rerun()
         
     st.subheader(t['h_t'])
     t1, t2 = st.tabs([t['h_t1'], t['h_t2']])
@@ -164,7 +182,7 @@ def m_community():
         if st.session_state.user:
             with st.expander(t['pub']):
                 tag, dish, cont = st.selectbox(t['tag'], ["#Daily", "#Diet", "#Yummy"] if t['sys_lang']=="English" else ["#日常", "#减脂", "#神仙菜"]), st.text_input(t['title_in']), st.text_area(t['desc_in'])
-                if st.button("OK") and dish:
+                if st.button(t['confirm']) and dish:
                     try:
                         supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute()
                         st.rerun()
@@ -175,28 +193,19 @@ def m_community():
         for r in supabase.table('comments').select("*").order('id', desc=True).execute().data:
             with st.container(border=True):
                 st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
-                
-                # 【核心修复 2】：装甲级 Type Guard (类型防呆设计)
-                # 无论数据库返回 None、字符串还是乱码，这里统统强制格式化为 List，绝不报错
                 lk = r.get('liked_by')
                 if not isinstance(lk, list): lk = [] 
-                
-                # 安全判断：未登录则为 False，避免 NoneType 报错
                 has_liked = (st.session_state.user in lk) if st.session_state.user else False
-                
-                # 如果没登录，点赞按钮直接置灰 (disabled)
                 if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
                     lk.append(st.session_state.user)
                     try:
                         supabase.table('comments').update({"likes": int(r.get('likes', 0))+1, "liked_by": lk}).eq("id", r['id']).execute()
                         st.rerun()
-                    except: pass # 静默容错，防并发崩溃
+                    except: pass
 
 def m_user():
-    # 【核心修复 1】：自动路由拦截！
     if not st.session_state.user: 
-        st.session_state.current_page = "Login"
-        st.rerun()
+        st.session_state.current_page = "Login"; st.rerun()
         
     st.subheader(t['u_t'])
     t1, t2 = st.tabs([t['u_t1'], t['u_t2']])
@@ -230,13 +239,14 @@ elif st.session_state.current_page == "Login":
     else:
         tb1, tb2 = st.tabs([t['login'], t['reg']])
         with tb1:
-            u, p = st.text_input("ID"), st.text_input("PWD", type="password")
-            if st.button("OK"):
+            # 【核心修复 1】全面本地化 ID/PWD 输入框
+            u, p = st.text_input(t['id_in']), st.text_input(t['pwd_in'], type="password")
+            if st.button(t['confirm'], key="btn_login"):
                 if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: st.session_state.user = u; st.session_state.current_page = "Home"; st.rerun()
                 else: st.error(t['err'])
         with tb2:
-            nu, np = st.text_input("New ID"), st.text_input("New PWD", type="password")
-            if st.button("GO"):
+            nu, np = st.text_input(t['new_id']), st.text_input(t['new_pwd'], type="password")
+            if st.button(t['confirm'], key="btn_reg"):
                 if supabase.table('app_users').select('*').eq('username', nu).execute().data: st.error(t['err'])
                 else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
 
@@ -244,13 +254,13 @@ elif st.session_state.current_page == "Settings":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
     st.markdown("---")
     
-    st.markdown("### 🎨 Preferences")
+    st.markdown(f"### 🎨 {'Preferences' if t['sys_lang']=='English' else '偏好设置'}")
     col_t, col_l = st.columns(2)
     with col_t:
-        new_th = st.selectbox("Theme", ["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"], index=["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"].index(st.session_state.theme))
+        new_th = st.selectbox("Theme / 主题", ["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"], index=["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"].index(st.session_state.theme))
         if new_th != st.session_state.theme: st.session_state.theme = new_th; st.rerun()
     with col_l:
-        new_la = st.selectbox("Language", ["🇨🇳 简体中文", "🇬🇧 English"], index=["🇨🇳 简体中文", "🇬🇧 English"].index(st.session_state.lang))
+        new_la = st.selectbox("Language / 语言", ["🇨🇳 简体中文", "🇬🇧 English"], index=["🇨🇳 简体中文", "🇬🇧 English"].index(st.session_state.lang))
         if new_la != st.session_state.lang: st.session_state.lang = new_la; st.rerun()
 
 else:
