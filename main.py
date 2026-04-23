@@ -16,7 +16,7 @@ if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Ap
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 
 # ==========================================
-# 1. 终极双语字典引擎 (i18n) - 补全所有死角
+# 1. 终极双语字典引擎 (i18n)
 # ==========================================
 i18n = {
     "🇨🇳 简体中文": {
@@ -53,7 +53,7 @@ i18n = {
 t = i18n[st.session_state.lang]
 
 # ==========================================
-# 2. 动态主题 CSS 引擎 (彻底修复禁用按钮黑框与文字颜色)
+# 2. 动态主题 CSS 引擎
 # ==========================================
 theme_colors = {
     "🍎 苹果白 (Apple Light)": {"bg": "#fcfcfd", "card": "#ffffff", "text": "#1d1d1f"},
@@ -64,25 +64,13 @@ c = theme_colors[st.session_state.theme]
 
 st.markdown(f"""
     <style>
-    /* 隐藏官方痕迹 */
     header[data-testid="stHeader"], footer {{visibility: hidden !important;}}
-    
-    /* 强制全局背景色与所有文字颜色跟随主题 */
     .stApp, .stApp > header {{ background-color: {c['bg']} !important; }}
     h1, h2, h3, h4, h5, h6, p, span, label, div[data-testid="stMarkdownContainer"] {{ color: {c['text']} !important; }}
-    
-    /* 修复普通按钮的字体颜色 */
     div[data-testid="stButton"] > button {{ color: {c['text']} !important; border-color: rgba(150,150,150,0.3) !important; }}
-    
-    /* 【核心修复】彻底解决已点赞(禁用)按钮变黑、变糊的问题 */
     div[data-testid="stButton"] > button:disabled {{
-        background-color: transparent !important;
-        color: {c['text']} !important;
-        opacity: 0.4 !important;
-        border: 1px solid rgba(150,150,150,0.2) !important;
+        background-color: transparent !important; color: {c['text']} !important; opacity: 0.4 !important; border: 1px solid rgba(150,150,150,0.2) !important;
     }}
-    
-    /* 巨型大卡片样式 */
     section[data-testid="stMain"] div.stButton > button[kind="primary"] {{
         height: 240px !important; border-radius: 28px !important; background-color: {c['card']} !important;
         border: 1px solid rgba(0,0,0,0.04) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
@@ -97,14 +85,13 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 数据库连接
 @st.cache_resource
 def init_db(): return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except: st.error("Database connection failed."); st.stop()
 
 # ==========================================
-# 3. 极速 AI 引擎调用层 (防拥塞优化)
+# 3. 极速 AI 引擎调用层
 # ==========================================
 def ask_ai(sys_p, usr_p, img=None):
     sys_p += f" You must explicitly format and output your entire response in {t['sys_lang']}."
@@ -113,7 +100,7 @@ def ask_ai(sys_p, usr_p, img=None):
     msg = [{"type": "text", "text": usr_p}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}}] if img else usr_p
     data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg}]} if not img else {"model": model, "messages": [{"role": "user", "content": msg}]}
     try: 
-        res = requests.post(url, headers=h, json=data, timeout=25) # 增加超时断开，防 WebSocket 假死
+        res = requests.post(url, headers=h, json=data, timeout=25)
         return res.json()['choices'][0]['message']['content']
     except Exception as e: return f"AI Network Error: {str(e)}"
 
@@ -132,7 +119,10 @@ def m_kitchen():
                 res = ask_ai("You are a Master Chef.", f"Identify the ingredients and generate a recipe. Requirements: {pref}", up.getvalue())
                 st.session_state['l_rec'] = res; st.markdown(res)
         if st.session_state.get('l_rec') and st.session_state.user and st.button(t['fav']):
-            supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['l_rec']}).execute(); st.success(t['suc'])
+            try:
+                supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['l_rec']}).execute()
+                st.success(t['suc'])
+            except Exception as e: st.error(f"DB Error: {e}")
     with t2:
         up_nutri = st.file_uploader(t['up_opt'], type=['jpg', 'png'], key="f2")
         if up_nutri: st.image(up_nutri, width=300)
@@ -156,15 +146,20 @@ def m_health():
                 with st.spinner(t['think']):
                     cal = int(''.join(filter(str.isdigit, ask_ai("Nutrition Calculator", f"Estimate total calories. Return ONLY an integer: Breakfast:{b} Lunch:{l} Dinner:{dn}"))) or 0)
                     payload = {"username": st.session_state.user, "log_date": str(d), "weight": w, "calories": cal, "breakfast": b, "lunch": l, "dinner": dn}
-                    if st.session_state.editing_id: supabase.table('diet_logs').update(payload).eq('id', st.session_state.editing_id).execute(); st.session_state.editing_id = None
-                    else: supabase.table('diet_logs').insert(payload).execute()
-                    st.rerun()
+                    try:
+                        if st.session_state.editing_id: supabase.table('diet_logs').update(payload).eq('id', st.session_state.editing_id).execute(); st.session_state.editing_id = None
+                        else: supabase.table('diet_logs').insert(payload).execute()
+                        st.rerun()
+                    except Exception as e: st.error(f"DB Error: {e}")
+                    
         for r in supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date', desc=True).execute().data:
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
                 st.write(f"{t['b']}:{r.get('breakfast','')} {t['l']}:{r.get('lunch','')} {t['dn']}:{r.get('dinner','')}")
                 ce, cd = st.columns(2)
                 if ce.button(t['edit'], key=f"e_{r['id']}"): st.session_state.editing_id = r['id']; st.rerun()
-                if cd.button(t['del'], key=f"d_{r['id']}"): supabase.table('diet_logs').delete().eq('id', r['id']).execute(); st.rerun()
+                if cd.button(t['del'], key=f"d_{r['id']}"): 
+                    try: supabase.table('diet_logs').delete().eq('id', r['id']).execute(); st.rerun()
+                    except Exception as e: st.error(f"DB Error: {e}")
     with t2:
         logs = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date').execute().data
         if logs: 
@@ -182,11 +177,13 @@ def m_community():
         if st.session_state.user:
             with st.expander(t['pub']):
                 tag, dish, cont = st.selectbox(t['tag'], ["#Daily", "#Diet", "#Yummy"] if t['sys_lang']=="English" else ["#日常", "#减脂", "#神仙菜"]), st.text_input(t['title_in']), st.text_area(t['desc_in'])
+                # 修复：移除掩耳盗铃的 except: pass，显式展示错误
                 if st.button(t['confirm']) and dish:
                     try:
                         supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute()
                         st.rerun()
-                    except: pass
+                    except Exception as e:
+                        st.error(f"🚫 发布失败 / Publish Failed: {str(e)}\n\n(提示：请确保已在 Supabase 运行了增加 liked_by 和 author_username 的 SQL 指令)")
         else:
             st.info(t['log_req'])
 
@@ -196,12 +193,15 @@ def m_community():
                 lk = r.get('liked_by')
                 if not isinstance(lk, list): lk = [] 
                 has_liked = (st.session_state.user in lk) if st.session_state.user else False
+                
+                # 修复点赞错误回传
                 if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
                     lk.append(st.session_state.user)
                     try:
                         supabase.table('comments').update({"likes": int(r.get('likes', 0))+1, "liked_by": lk}).eq("id", r['id']).execute()
                         st.rerun()
-                    except: pass
+                    except Exception as e:
+                        st.error(f"🚫 点赞失败 / Like Failed: {str(e)}")
 
 def m_user():
     if not st.session_state.user: 
@@ -239,16 +239,19 @@ elif st.session_state.current_page == "Login":
     else:
         tb1, tb2 = st.tabs([t['login'], t['reg']])
         with tb1:
-            # 【核心修复 1】全面本地化 ID/PWD 输入框
             u, p = st.text_input(t['id_in']), st.text_input(t['pwd_in'], type="password")
             if st.button(t['confirm'], key="btn_login"):
-                if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: st.session_state.user = u; st.session_state.current_page = "Home"; st.rerun()
-                else: st.error(t['err'])
+                try:
+                    if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: st.session_state.user = u; st.session_state.current_page = "Home"; st.rerun()
+                    else: st.error(t['err'])
+                except Exception as e: st.error(f"DB Error: {e}")
         with tb2:
             nu, np = st.text_input(t['new_id']), st.text_input(t['new_pwd'], type="password")
             if st.button(t['confirm'], key="btn_reg"):
-                if supabase.table('app_users').select('*').eq('username', nu).execute().data: st.error(t['err'])
-                else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
+                try:
+                    if supabase.table('app_users').select('*').eq('username', nu).execute().data: st.error(t['err'])
+                    else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
+                except Exception as e: st.error(f"DB Error: {e}")
 
 elif st.session_state.current_page == "Settings":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
