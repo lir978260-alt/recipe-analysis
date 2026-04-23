@@ -10,12 +10,8 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="centered")
 
-# 【核心功能】：初始化 Cookie 管理器
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# 【核心修复】：移除 @st.cache_resource，直接实例化并赋予固定 key 保证稳定
+cookie_manager = stx.CookieManager(key="cookie_manager")
 
 for k in ['user', 'editing_id']:
     if k not in st.session_state: st.session_state[k] = None
@@ -283,7 +279,7 @@ elif st.session_state.current_page == "Login":
     if st.session_state.user:
         st.success(f"{t['suc']}：{st.session_state.user}")
         if st.button(t['out']): 
-            cookie_manager.delete("saved_user") # 【核心】：退出时销毁 Cookie
+            cookie_manager.delete("saved_user") # 退出时销毁 Cookie
             st.session_state.user = None
             st.rerun()
     else:
@@ -294,7 +290,6 @@ elif st.session_state.current_page == "Login":
                 try:
                     if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
                         st.session_state.user = u
-                        # 【核心】：登录成功，下发 30 天免登录令牌
                         cookie_manager.set("saved_user", u, expires_at=datetime.now() + timedelta(days=30))
                         st.session_state.current_page = "Home"
                         st.rerun()
