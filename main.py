@@ -1,19 +1,32 @@
 import streamlit as st
 import base64, requests
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from supabase import create_client
+import extra_streamlit_components as stx
 
 # ==========================================
 # 0. 全局状态与基础配置
 # ==========================================
 st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="centered")
 
+# 【核心功能】：初始化 Cookie 管理器
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+
 for k in ['user', 'editing_id']:
     if k not in st.session_state: st.session_state[k] = None
 if 'current_page' not in st.session_state: st.session_state.current_page = "Home"
 if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Apple Light)"
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
+
+# 【核心功能】：无感自动登录拦截
+saved_user = cookie_manager.get(cookie="saved_user")
+if saved_user and st.session_state.user is None:
+    st.session_state.user = saved_user
 
 # ==========================================
 # 1. 终极双语字典引擎 (i18n)
@@ -33,7 +46,6 @@ i18n = {
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
         "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据",
         "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认",
-        # 【新增V10.0词汇】
         "unfav": "💔 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下你的回复...", "send": "发送"
     },
     "🇬🇧 English": {
@@ -50,7 +62,6 @@ i18n = {
         "u_t": "👤 My Profile", "u_t1": "📜 My Posts", "u_t2": "⭐ Favorites",
         "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available",
         "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm",
-        # 【新增V10.0词汇】
         "unfav": "💔 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply", "reply_ph": "Write a reply...", "send": "Send"
     }
 }
@@ -193,7 +204,6 @@ def m_community():
             with st.container(border=True):
                 st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
                 
-                # --- 点赞逻辑 ---
                 lk = r.get('liked_by')
                 if not isinstance(lk, list): lk = [] 
                 has_liked = (st.session_state.user in lk) if st.session_state.user else False
@@ -204,14 +214,11 @@ def m_community():
                         st.rerun()
                     except: pass
                 
-                # --- 盖楼回复逻辑 (V10.0新增) ---
                 reps = r.get('replies')
                 if not isinstance(reps, list): reps = []
-                
                 if len(reps) > 0:
                     st.markdown("---")
-                    for rep in reps:
-                        st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
+                    for rep in reps: st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
                 
                 if st.session_state.user:
                     with st.expander(t['reply']):
@@ -230,7 +237,6 @@ def m_user():
     st.subheader(t['u_t'])
     t1, t2 = st.tabs([t['u_t1'], t['u_t2']])
     
-    # --- 我的发布 & 删除逻辑 (V10.0新增) ---
     with t1:
         my_posts = supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data
         if not my_posts: st.info(t['no_data'])
@@ -243,7 +249,6 @@ def m_user():
                         st.rerun()
                     except Exception as e: st.error(f"Delete Failed: {e}")
                     
-    # --- 我的收藏 & 取消收藏逻辑 (V10.0新增) ---
     with t2:
         favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).order('id', desc=True).execute().data
         if not favs: st.info(t['no_data'])
@@ -277,14 +282,22 @@ elif st.session_state.current_page == "Login":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
     if st.session_state.user:
         st.success(f"{t['suc']}：{st.session_state.user}")
-        if st.button(t['out']): st.session_state.user = None; st.rerun()
+        if st.button(t['out']): 
+            cookie_manager.delete("saved_user") # 【核心】：退出时销毁 Cookie
+            st.session_state.user = None
+            st.rerun()
     else:
         tb1, tb2 = st.tabs([t['login'], t['reg']])
         with tb1:
             u, p = st.text_input(t['id_in']), st.text_input(t['pwd_in'], type="password")
             if st.button(t['confirm'], key="btn_login"):
                 try:
-                    if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: st.session_state.user = u; st.session_state.current_page = "Home"; st.rerun()
+                    if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
+                        st.session_state.user = u
+                        # 【核心】：登录成功，下发 30 天免登录令牌
+                        cookie_manager.set("saved_user", u, expires_at=datetime.now() + timedelta(days=30))
+                        st.session_state.current_page = "Home"
+                        st.rerun()
                     else: st.error(t['err'])
                 except Exception as e: st.error(f"DB Error: {e}")
         with tb2:
