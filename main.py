@@ -32,7 +32,9 @@ i18n = {
         "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容", "log_req": "⚠️ 请先登录",
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
         "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据",
-        "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认"
+        "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认",
+        # 【新增V10.0词汇】
+        "unfav": "💔 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下你的回复...", "send": "发送"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "AI Health Ecosystem", "login": "Login", "set": "Settings", "back": "Back to Home",
@@ -47,7 +49,9 @@ i18n = {
         "tag": "Select Tag", "title_in": "Enter Title", "desc_in": "Enter Details", "log_req": "⚠️ Please login first",
         "u_t": "👤 My Profile", "u_t1": "📜 My Posts", "u_t2": "⭐ Favorites",
         "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available",
-        "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm"
+        "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm",
+        # 【新增V10.0词汇】
+        "unfav": "💔 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply", "reply_ph": "Write a reply...", "send": "Send"
     }
 }
 t = i18n[st.session_state.lang]
@@ -177,31 +181,47 @@ def m_community():
         if st.session_state.user:
             with st.expander(t['pub']):
                 tag, dish, cont = st.selectbox(t['tag'], ["#Daily", "#Diet", "#Yummy"] if t['sys_lang']=="English" else ["#日常", "#减脂", "#神仙菜"]), st.text_input(t['title_in']), st.text_area(t['desc_in'])
-                # 修复：移除掩耳盗铃的 except: pass，显式展示错误
                 if st.button(t['confirm']) and dish:
                     try:
-                        supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag}).execute()
+                        supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag, "replies": []}).execute()
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"🚫 发布失败 / Publish Failed: {str(e)}\n\n(提示：请确保已在 Supabase 运行了增加 liked_by 和 author_username 的 SQL 指令)")
+                    except Exception as e: st.error(f"Publish Failed: {str(e)}")
         else:
             st.info(t['log_req'])
 
         for r in supabase.table('comments').select("*").order('id', desc=True).execute().data:
             with st.container(border=True):
                 st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
+                
+                # --- 点赞逻辑 ---
                 lk = r.get('liked_by')
                 if not isinstance(lk, list): lk = [] 
                 has_liked = (st.session_state.user in lk) if st.session_state.user else False
-                
-                # 修复点赞错误回传
                 if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
                     lk.append(st.session_state.user)
                     try:
                         supabase.table('comments').update({"likes": int(r.get('likes', 0))+1, "liked_by": lk}).eq("id", r['id']).execute()
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"🚫 点赞失败 / Like Failed: {str(e)}")
+                    except: pass
+                
+                # --- 盖楼回复逻辑 (V10.0新增) ---
+                reps = r.get('replies')
+                if not isinstance(reps, list): reps = []
+                
+                if len(reps) > 0:
+                    st.markdown("---")
+                    for rep in reps:
+                        st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
+                
+                if st.session_state.user:
+                    with st.expander(t['reply']):
+                        rep_text = st.text_input(t['reply_ph'], key=f"rt_{r['id']}")
+                        if st.button(t['send'], key=f"rs_{r['id']}") and rep_text:
+                            reps.append({"u": st.session_state.user, "t": rep_text})
+                            try:
+                                supabase.table('comments').update({"replies": reps}).eq("id", r['id']).execute()
+                                st.rerun()
+                            except Exception as e: st.error(f"Reply Failed: {e}")
 
 def m_user():
     if not st.session_state.user: 
@@ -209,11 +229,33 @@ def m_user():
         
     st.subheader(t['u_t'])
     t1, t2 = st.tabs([t['u_t1'], t['u_t2']])
+    
+    # --- 我的发布 & 删除逻辑 (V10.0新增) ---
     with t1:
-        for p in supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data: st.info(f"**{p['dish_name']}**\n{p['comment']}")
+        my_posts = supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data
+        if not my_posts: st.info(t['no_data'])
+        for p in my_posts: 
+            with st.container(border=True):
+                st.info(f"**{p['dish_name']}**\n{p['comment']}")
+                if st.button(t['del_post'], key=f"dp_{p['id']}"):
+                    try:
+                        supabase.table('comments').delete().eq('id', p['id']).execute()
+                        st.rerun()
+                    except Exception as e: st.error(f"Delete Failed: {e}")
+                    
+    # --- 我的收藏 & 取消收藏逻辑 (V10.0新增) ---
     with t2:
-        for f in supabase.table('favorites').select('*').eq('username', st.session_state.user).order('id', desc=True).execute().data:
-            if f.get('recipe_content'): st.expander(t['fav']).markdown(f['recipe_content'])
+        favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).order('id', desc=True).execute().data
+        if not favs: st.info(t['no_data'])
+        for f in favs:
+            with st.container(border=True):
+                if f.get('recipe_content'): 
+                    with st.expander(t['fav']): st.markdown(f['recipe_content'])
+                if st.button(t['unfav'], key=f"uf_{f['id']}"):
+                    try:
+                        supabase.table('favorites').delete().eq('id', f['id']).execute()
+                        st.rerun()
+                    except Exception as e: st.error(f"Unfavorite Failed: {e}")
 
 # ==========================================
 # 5. 核心路由与多语言导航
