@@ -10,19 +10,35 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="centered")
 
-# 【核心修复】：移除 @st.cache_resource，直接实例化并赋予固定 key 保证稳定
-cookie_manager = stx.CookieManager(key="cookie_manager")
-
+# 初始化基础状态
 for k in ['user', 'editing_id']:
     if k not in st.session_state: st.session_state[k] = None
 if 'current_page' not in st.session_state: st.session_state.current_page = "Home"
 if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Apple Light)"
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 
-# 【核心功能】：无感自动登录拦截
+# 【核心修复 1】：建立 Cookie 任务队列状态
+if 'need_set_cookie' not in st.session_state: st.session_state.need_set_cookie = False
+if 'need_del_cookie' not in st.session_state: st.session_state.need_del_cookie = False
+if 'logout_flag' not in st.session_state: st.session_state.logout_flag = False
+
+# 实例化 Cookie 管理器
+cookie_manager = stx.CookieManager(key="cookie_manager")
+
+# 【核心修复 2】：在网页渲染最顶层、最安全的地方执行 Cookie 写入和销毁
+if st.session_state.need_set_cookie:
+    cookie_manager.set("saved_user", st.session_state.user, expires_at=datetime.now() + timedelta(days=30))
+    st.session_state.need_set_cookie = False
+
+if st.session_state.need_del_cookie:
+    cookie_manager.delete("saved_user")
+    st.session_state.need_del_cookie = False
+
+# 【核心修复 3】：精准识别免登录状态（防止退出时由于前端延迟造成幽灵重连）
 saved_user = cookie_manager.get(cookie="saved_user")
-if saved_user and st.session_state.user is None:
+if saved_user and st.session_state.user is None and not st.session_state.logout_flag:
     st.session_state.user = saved_user
+    st.rerun()
 
 # ==========================================
 # 1. 终极双语字典引擎 (i18n)
@@ -279,8 +295,9 @@ elif st.session_state.current_page == "Login":
     if st.session_state.user:
         st.success(f"{t['suc']}：{st.session_state.user}")
         if st.button(t['out']): 
-            cookie_manager.delete("saved_user") # 退出时销毁 Cookie
             st.session_state.user = None
+            st.session_state.need_del_cookie = True
+            st.session_state.logout_flag = True
             st.rerun()
     else:
         tb1, tb2 = st.tabs([t['login'], t['reg']])
@@ -290,7 +307,8 @@ elif st.session_state.current_page == "Login":
                 try:
                     if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
                         st.session_state.user = u
-                        cookie_manager.set("saved_user", u, expires_at=datetime.now() + timedelta(days=30))
+                        st.session_state.need_set_cookie = True
+                        st.session_state.logout_flag = False
                         st.session_state.current_page = "Home"
                         st.rerun()
                     else: st.error(t['err'])
