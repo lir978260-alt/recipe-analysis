@@ -10,22 +10,18 @@ import extra_streamlit_components as stx
 # ==========================================
 st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="centered")
 
-# 初始化基础状态
 for k in ['user', 'editing_id']:
     if k not in st.session_state: st.session_state[k] = None
 if 'current_page' not in st.session_state: st.session_state.current_page = "Home"
 if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Apple Light)"
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 
-# 【核心修复 1】：建立 Cookie 任务队列状态
 if 'need_set_cookie' not in st.session_state: st.session_state.need_set_cookie = False
 if 'need_del_cookie' not in st.session_state: st.session_state.need_del_cookie = False
 if 'logout_flag' not in st.session_state: st.session_state.logout_flag = False
 
-# 实例化 Cookie 管理器
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
-# 【核心修复 2】：在网页渲染最顶层、最安全的地方执行 Cookie 写入和销毁
 if st.session_state.need_set_cookie:
     cookie_manager.set("saved_user", st.session_state.user, expires_at=datetime.now() + timedelta(days=30))
     st.session_state.need_set_cookie = False
@@ -34,7 +30,6 @@ if st.session_state.need_del_cookie:
     cookie_manager.delete("saved_user")
     st.session_state.need_del_cookie = False
 
-# 【核心修复 3】：精准识别免登录状态（防止退出时由于前端延迟造成幽灵重连）
 saved_user = cookie_manager.get(cookie="saved_user")
 if saved_user and st.session_state.user is None and not st.session_state.logout_flag:
     st.session_state.user = saved_user
@@ -50,7 +45,7 @@ i18n = {
         "m3": "📈 健康数据管家\n\n数据打卡 · AI 周报", "m4": "👤 我的专属主页\n\n发布记录 · 收藏中心",
         "k_t": "🍳 AI 智能后厨", "k_t1": "📸 看图出菜谱", "k_t2": "💬 营养师问答", "up": "上传食材照片",
         "req": "口味要求 (可选)", "gen": "生成菜谱", "fav": "⭐️ 收藏此篇", "ask": "向营养师提问",
-        "up_opt": "上传参考图片 (可选)", "think": "AI 正在思考...",
+        "up_opt": "上传参考图片 (可选)", "think": "AI 大厨正在仔细看图，请稍候...",
         "h_t": "📈 健康数据管家", "h_t1": "📝 数据录入", "h_t2": "📊 分析报告", "d": "选择日期", "w": "体重 (kg)",
         "b": "早餐记录", "l": "午餐记录", "dn": "晚餐记录", "sub": "提交并计算热量", "del": "删除", "edit": "修改",
         "c_t": "🏘️ 美食广场社区", "c_t1": "🔥 热力榜", "c_t2": "💬 交流大厅", "pub": "🚀 发布动态", "like": "赞",
@@ -66,7 +61,7 @@ i18n = {
         "m3": "📈 Health Tracker\n\nDaily Log & AI Report", "m4": "👤 My Profile\n\nHistory & Favs",
         "k_t": "🍳 AI Kitchen", "k_t1": "📸 Image to Recipe", "k_t2": "💬 Dietitian Q&A", "up": "Upload Ingredients",
         "req": "Preferences (Optional)", "gen": "Generate Recipe", "fav": "⭐️ Save Recipe", "ask": "Ask Dietitian",
-        "up_opt": "Upload Image (Optional)", "think": "AI is processing...",
+        "up_opt": "Upload Image (Optional)", "think": "AI is analyzing the image, please wait...",
         "h_t": "📈 Health Tracker", "h_t1": "📝 Data Entry", "h_t2": "📊 Analytics", "d": "Date", "w": "Weight (kg)",
         "b": "Breakfast Log", "l": "Lunch Log", "dn": "Dinner Log", "sub": "Submit & Calc Calories", "del": "Delete", "edit": "Edit",
         "c_t": "🏘️ Community Square", "c_t1": "🔥 Trending", "c_t2": "💬 Discussion", "pub": "🚀 Publish", "like": "Like",
@@ -118,7 +113,7 @@ try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except: st.error("Database connection failed."); st.stop()
 
 # ==========================================
-# 3. 极速 AI 引擎调用层
+# 3. 极速 AI 引擎调用层 (修复视觉大模型超时)
 # ==========================================
 def ask_ai(sys_p, usr_p, img=None):
     sys_p += f" You must explicitly format and output your entire response in {t['sys_lang']}."
@@ -127,7 +122,8 @@ def ask_ai(sys_p, usr_p, img=None):
     msg = [{"type": "text", "text": usr_p}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}}] if img else usr_p
     data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg}]} if not img else {"model": model, "messages": [{"role": "user", "content": msg}]}
     try: 
-        res = requests.post(url, headers=h, json=data, timeout=25)
+        # 【核心修复】：将超时时间从 25 秒大幅提升至 90 秒，给视觉大模型充足的时间处理图片
+        res = requests.post(url, headers=h, json=data, timeout=90)
         return res.json()['choices'][0]['message']['content']
     except Exception as e: return f"AI Network Error: {str(e)}"
 
