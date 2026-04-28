@@ -1,21 +1,22 @@
 import streamlit as st
-import base64, requests
+import base64, requests, json
 import pandas as pd
 from datetime import datetime, date, timedelta
 from supabase import create_client
 import extra_streamlit_components as stx
 
 # ==========================================
-# 0. 全局状态与基础配置
+# 0. 全局状态与基础自适应配置
 # ==========================================
-st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="centered")
+# 【核心升级 1】：启用 layout="wide"，打破屏幕宽度限制，全面开启自适应伸缩
+st.set_page_config(page_title="AI Health Ecosystem", page_icon="🍎", layout="wide", initial_sidebar_state="collapsed")
 
 for k in ['user', 'editing_id']:
     if k not in st.session_state: st.session_state[k] = None
 if 'current_page' not in st.session_state: st.session_state.current_page = "Home"
-if 'theme' not in st.session_state: st.session_state.theme = "🍎 苹果白 (Apple Light)"
 if 'lang' not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 
+# Cookie 任务队列状态
 if 'need_set_cookie' not in st.session_state: st.session_state.need_set_cookie = False
 if 'need_del_cookie' not in st.session_state: st.session_state.need_del_cookie = False
 if 'logout_flag' not in st.session_state: st.session_state.logout_flag = False
@@ -36,7 +37,7 @@ if saved_user and st.session_state.user is None and not st.session_state.logout_
     st.rerun()
 
 # ==========================================
-# 1. 终极双语字典引擎 (i18n)
+# 1. 双语字典引擎 (i18n)
 # ==========================================
 i18n = {
     "🇨🇳 简体中文": {
@@ -45,7 +46,7 @@ i18n = {
         "m3": "📈 健康数据管家\n\n数据打卡 · AI 周报", "m4": "👤 我的专属主页\n\n发布记录 · 收藏中心",
         "k_t": "🍳 AI 智能后厨", "k_t1": "📸 看图出菜谱", "k_t2": "💬 营养师问答", "up": "上传食材照片",
         "req": "口味要求 (可选)", "gen": "生成菜谱", "fav": "⭐️ 收藏此篇", "ask": "向营养师提问",
-        "up_opt": "上传参考图片 (可选)", "think": "AI 大厨正在仔细看图，请稍候...",
+        "up_opt": "上传参考图片 (可选)", "think": "数据传输中...",
         "h_t": "📈 健康数据管家", "h_t1": "📝 数据录入", "h_t2": "📊 分析报告", "d": "选择日期", "w": "体重 (kg)",
         "b": "早餐记录", "l": "午餐记录", "dn": "晚餐记录", "sub": "提交并计算热量", "del": "删除", "edit": "修改",
         "c_t": "🏘️ 美食广场社区", "c_t1": "🔥 热力榜", "c_t2": "💬 交流大厅", "pub": "🚀 发布动态", "like": "赞",
@@ -53,7 +54,7 @@ i18n = {
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
         "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据",
         "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认",
-        "unfav": "💔 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下你的回复...", "send": "发送"
+        "unfav": "💔 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下回复...", "send": "发送"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "AI Health Ecosystem", "login": "Login", "set": "Settings", "back": "Back to Home",
@@ -61,7 +62,7 @@ i18n = {
         "m3": "📈 Health Tracker\n\nDaily Log & AI Report", "m4": "👤 My Profile\n\nHistory & Favs",
         "k_t": "🍳 AI Kitchen", "k_t1": "📸 Image to Recipe", "k_t2": "💬 Dietitian Q&A", "up": "Upload Ingredients",
         "req": "Preferences (Optional)", "gen": "Generate Recipe", "fav": "⭐️ Save Recipe", "ask": "Ask Dietitian",
-        "up_opt": "Upload Image (Optional)", "think": "AI is analyzing the image, please wait...",
+        "up_opt": "Upload Image (Optional)", "think": "Transmitting data...",
         "h_t": "📈 Health Tracker", "h_t1": "📝 Data Entry", "h_t2": "📊 Analytics", "d": "Date", "w": "Weight (kg)",
         "b": "Breakfast Log", "l": "Lunch Log", "dn": "Dinner Log", "sub": "Submit & Calc Calories", "del": "Delete", "edit": "Edit",
         "c_t": "🏘️ Community Square", "c_t1": "🔥 Trending", "c_t2": "💬 Discussion", "pub": "🚀 Publish", "like": "Like",
@@ -74,61 +75,103 @@ i18n = {
 }
 t = i18n[st.session_state.lang]
 
-# ==========================================
-# 2. 动态主题 CSS 引擎
-# ==========================================
-theme_colors = {
-    "🍎 苹果白 (Apple Light)": {"bg": "#fcfcfd", "card": "#ffffff", "text": "#1d1d1f"},
-    "🌌 暗夜黑 (Dark Mode)": {"bg": "#1c1c1e", "card": "#2c2c2e", "text": "#f5f5f7"},
-    "🍃 抹茶绿 (Nature Mint)": {"bg": "#f4fbf6", "card": "#ffffff", "text": "#2d3a33"}
-}
-c = theme_colors[st.session_state.theme]
-
-st.markdown(f"""
-    <style>
-    header[data-testid="stHeader"], footer {{visibility: hidden !important;}}
-    .stApp, .stApp > header {{ background-color: {c['bg']} !important; }}
-    h1, h2, h3, h4, h5, h6, p, span, label, div[data-testid="stMarkdownContainer"] {{ color: {c['text']} !important; }}
-    div[data-testid="stButton"] > button {{ color: {c['text']} !important; border-color: rgba(150,150,150,0.3) !important; }}
-    div[data-testid="stButton"] > button:disabled {{
-        background-color: transparent !important; color: {c['text']} !important; opacity: 0.4 !important; border: 1px solid rgba(150,150,150,0.2) !important;
-    }}
-    section[data-testid="stMain"] div.stButton > button[kind="primary"] {{
-        height: 240px !important; border-radius: 28px !important; background-color: {c['card']} !important;
-        border: 1px solid rgba(0,0,0,0.04) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
-        transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important; opacity: 1 !important;
-    }}
-    section[data-testid="stMain"] div.stButton > button[kind="primary"]:hover {{
-        transform: translateY(-8px) scale(1.02) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
-    }}
-    section[data-testid="stMain"] div.stButton > button[kind="primary"] p {{
-        font-size: 1.4rem !important; font-weight: 600 !important; color: {c['text']} !important; line-height: 1.5 !important;
-    }}
-    </style>
-""", unsafe_allow_html=True)
-
 @st.cache_resource
 def init_db(): return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except: st.error("Database connection failed."); st.stop()
 
 # ==========================================
-# 3. 极速 AI 引擎调用层 (修复视觉大模型超时)
+# 2. 自适应 CSS 引擎
 # ==========================================
-def ask_ai(sys_p, usr_p, img=None):
-    sys_p += f" You must explicitly format and output your entire response in {t['sys_lang']}."
-    model = "qwen-vl-plus" if img else "qwen-turbo"
-    url, h = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
-    msg = [{"type": "text", "text": usr_p}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}}] if img else usr_p
-    data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg}]} if not img else {"model": model, "messages": [{"role": "user", "content": msg}]}
-    try: 
-        # 【核心修复】：将超时时间从 25 秒大幅提升至 90 秒，给视觉大模型充足的时间处理图片
-        res = requests.post(url, headers=h, json=data, timeout=90)
-        return res.json()['choices'][0]['message']['content']
-    except Exception as e: return f"AI Network Error: {str(e)}"
+# 【核心升级 2】：使用柔性布局 min-height 与相对单位，适配移动端到宽屏的所有尺寸
+st.markdown("""
+    <style>
+    header[data-testid="stHeader"], footer {visibility: hidden !important;}
+    
+    /* 大纲容器限制最大宽度，保证宽屏不显得过于空旷 */
+    .block-container {
+        max-width: 1200px !important;
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
+    }
+    
+    div[data-testid="stButton"] > button:disabled {
+        background-color: transparent !important; opacity: 0.4 !important; border: 1px solid rgba(150,150,150,0.2) !important;
+    }
+    
+    /* 柔性大卡片设计，防手机端文字溢出挤压 */
+    section[data-testid="stMain"] div.stButton > button[kind="primary"] {
+        min-height: 180px !important; 
+        height: auto !important;
+        padding: 1.5rem !important;
+        border-radius: 24px !important; 
+        border: 1px solid rgba(0,0,0,0.06) !important; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
+        transition: all 0.3s ease-in-out !important; 
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    section[data-testid="stMain"] div.stButton > button[kind="primary"]:hover {
+        transform: translateY(-6px) scale(1.01) !important; box-shadow: 0 12px 24px rgba(0,0,0,0.08) !important;
+    }
+    section[data-testid="stMain"] div.stButton > button[kind="primary"] p {
+        font-size: clamp(1.1rem, 2vw, 1.4rem) !important; 
+        font-weight: 600 !important; 
+        line-height: 1.5 !important;
+        white-space: pre-wrap !important; 
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 四大核心模块函数
+# 3. 流式 AI 引擎调用层 (Streaming Engine)
+# ==========================================
+def ask_ai_stream(sys_p, usr_p, img=None):
+    usr_p += f"\n\n[CRITICAL INSTRUCTION: You must strictly output your entire response in {t['sys_lang']}! Do not use any other language.]"
+    model = "qwen-vl-plus" if img else "qwen-plus"
+    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    h = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+    
+    msg_content = [{"type": "text", "text": usr_p}]
+    if img:
+        b64 = base64.b64encode(img).decode('utf-8')
+        msg_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+        
+    data = {
+        "model": model, 
+        "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg_content}],
+        "stream": True
+    }
+    
+    try: 
+        res = requests.post(url, headers=h, json=data, timeout=90, stream=True)
+        for line in res.iter_lines():
+            if line:
+                line_str = line.decode('utf-8')
+                if line_str.startswith('data: ') and line_str != 'data: [DONE]':
+                    try:
+                        chunk = json.loads(line_str[6:])
+                        delta = chunk['choices'][0]['delta'].get('content', '')
+                        if delta:
+                            yield delta
+                    except: pass
+    except Exception as e: 
+        yield f"\n\nAI Network Error: {str(e)}"
+
+def ask_ai_sync(sys_p, usr_p):
+    model = "qwen-plus"
+    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    h = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+    data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": usr_p}]}
+    try: 
+        res = requests.post(url, headers=h, json=data, timeout=30)
+        return res.json()['choices'][0]['message']['content']
+    except: return "0"
+
+# ==========================================
+# 4. 核心模块函数
 # ==========================================
 def m_kitchen():
     st.subheader(t['k_t'])
@@ -136,11 +179,11 @@ def m_kitchen():
     with t1:
         c1, c2 = st.columns(2)
         up, pref = c1.file_uploader(t['up'], type=['jpg', 'png'], key="f1"), c1.text_input(t['req'])
-        if up: c2.image(up)
+        if up: c2.image(up, use_column_width=True)
         if st.button(t['gen']) and up:
             with st.spinner(t['think']):
-                res = ask_ai("You are a Master Chef.", f"Identify the ingredients and generate a recipe. Requirements: {pref}", up.getvalue())
-                st.session_state['l_rec'] = res; st.markdown(res)
+                res = st.write_stream(ask_ai_stream("You are a Master Chef.", f"Identify the ingredients and generate a highly professional recipe. Requirements: {pref}", up.getvalue()))
+                st.session_state['l_rec'] = res
         if st.session_state.get('l_rec') and st.session_state.user and st.button(t['fav']):
             try:
                 supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['l_rec']}).execute()
@@ -148,11 +191,11 @@ def m_kitchen():
             except Exception as e: st.error(f"DB Error: {e}")
     with t2:
         up_nutri = st.file_uploader(t['up_opt'], type=['jpg', 'png'], key="f2")
-        if up_nutri: st.image(up_nutri, width=300)
+        if up_nutri: st.image(up_nutri, use_column_width=True)
         q = st.text_area(t['ask'])
         if st.button(t['confirm']) and q:
             with st.spinner(t['think']):
-                st.info(ask_ai("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None))
+                st.write_stream(ask_ai_stream("You are a highly professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None))
 
 def m_health():
     if not st.session_state.user: 
@@ -166,14 +209,13 @@ def m_health():
             d, w = c1.date_input(t['d'], date.today()), c2.number_input(t['w'], 60.0, step=0.1)
             b, l, dn = st.text_input(t['b']), st.text_input(t['l']), st.text_input(t['dn'])
             if st.form_submit_button(t['sub'], type="primary"):
-                with st.spinner(t['think']):
-                    cal = int(''.join(filter(str.isdigit, ask_ai("Nutrition Calculator", f"Estimate total calories. Return ONLY an integer: Breakfast:{b} Lunch:{l} Dinner:{dn}"))) or 0)
-                    payload = {"username": st.session_state.user, "log_date": str(d), "weight": w, "calories": cal, "breakfast": b, "lunch": l, "dinner": dn}
-                    try:
-                        if st.session_state.editing_id: supabase.table('diet_logs').update(payload).eq('id', st.session_state.editing_id).execute(); st.session_state.editing_id = None
-                        else: supabase.table('diet_logs').insert(payload).execute()
-                        st.rerun()
-                    except Exception as e: st.error(f"DB Error: {e}")
+                cal = int(''.join(filter(str.isdigit, ask_ai_sync("Nutrition Calculator", f"Estimate total calories. Return ONLY an integer: Breakfast:{b} Lunch:{l} Dinner:{dn}"))) or 0)
+                payload = {"username": st.session_state.user, "log_date": str(d), "weight": w, "calories": cal, "breakfast": b, "lunch": l, "dinner": dn}
+                try:
+                    if st.session_state.editing_id: supabase.table('diet_logs').update(payload).eq('id', st.session_state.editing_id).execute(); st.session_state.editing_id = None
+                    else: supabase.table('diet_logs').insert(payload).execute()
+                    st.rerun()
+                except Exception as e: st.error(f"DB Error: {e}")
                     
         for r in supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date', desc=True).execute().data:
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
@@ -205,8 +247,7 @@ def m_community():
                         supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag, "replies": []}).execute()
                         st.rerun()
                     except Exception as e: st.error(f"Publish Failed: {str(e)}")
-        else:
-            st.info(t['log_req'])
+        else: st.info(t['log_req'])
 
         for r in supabase.table('comments').select("*").order('id', desc=True).execute().data:
             with st.container(border=True):
@@ -271,16 +312,16 @@ def m_user():
                     except Exception as e: st.error(f"Unfavorite Failed: {e}")
 
 # ==========================================
-# 5. 核心路由与多语言导航
+# 5. 路由导航
 # ==========================================
 if st.session_state.current_page == "Home":
-    c_title, c_log, c_set = st.columns([6, 2, 2])
+    c_title, c_log, c_set = st.columns([8, 2, 2])
     c_title.markdown(f"<h2 style='margin-top:-10px;'>{t['title']}</h2>", unsafe_allow_html=True)
     if c_log.button(f"👤 {st.session_state.user}" if st.session_state.user else f"👤 {t['login']}", use_container_width=True): st.session_state.current_page = "Login"; st.rerun()
     if c_set.button(f"⚙️ {t['set']}", use_container_width=True): st.session_state.current_page = "Settings"; st.rerun()
     st.write("\n\n")
     
-    c1, c2 = st.columns(2, gap="large")
+    c1, c2 = st.columns(2, gap="medium")
     if c1.button(t['m1'], type="primary", use_container_width=True): st.session_state.current_page = "A"; st.rerun()
     if c1.button(t['m2'], type="primary", use_container_width=True): st.session_state.current_page = "C"; st.rerun()
     if c2.button(t['m3'], type="primary", use_container_width=True): st.session_state.current_page = "B"; st.rerun()
@@ -288,47 +329,44 @@ if st.session_state.current_page == "Home":
 
 elif st.session_state.current_page == "Login":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
-    if st.session_state.user:
-        st.success(f"{t['suc']}：{st.session_state.user}")
-        if st.button(t['out']): 
-            st.session_state.user = None
-            st.session_state.need_del_cookie = True
-            st.session_state.logout_flag = True
-            st.rerun()
-    else:
-        tb1, tb2 = st.tabs([t['login'], t['reg']])
-        with tb1:
-            u, p = st.text_input(t['id_in']), st.text_input(t['pwd_in'], type="password")
-            if st.button(t['confirm'], key="btn_login"):
-                try:
-                    if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
-                        st.session_state.user = u
-                        st.session_state.need_set_cookie = True
-                        st.session_state.logout_flag = False
-                        st.session_state.current_page = "Home"
-                        st.rerun()
-                    else: st.error(t['err'])
-                except Exception as e: st.error(f"DB Error: {e}")
-        with tb2:
-            nu, np = st.text_input(t['new_id']), st.text_input(t['new_pwd'], type="password")
-            if st.button(t['confirm'], key="btn_reg"):
-                try:
-                    if supabase.table('app_users').select('*').eq('username', nu).execute().data: st.error(t['err'])
-                    else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
-                except Exception as e: st.error(f"DB Error: {e}")
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.session_state.user:
+            st.success(f"{t['suc']}：{st.session_state.user}")
+            if st.button(t['out'], use_container_width=True): 
+                st.session_state.user = None
+                st.session_state.need_del_cookie = True
+                st.session_state.logout_flag = True
+                st.rerun()
+        else:
+            tb1, tb2 = st.tabs([t['login'], t['reg']])
+            with tb1:
+                u, p = st.text_input(t['id_in']), st.text_input(t['pwd_in'], type="password")
+                if st.button(t['confirm'], key="btn_login", use_container_width=True):
+                    try:
+                        if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
+                            st.session_state.user = u
+                            st.session_state.need_set_cookie = True
+                            st.session_state.logout_flag = False
+                            st.session_state.current_page = "Home"
+                            st.rerun()
+                        else: st.error(t['err'])
+                    except Exception as e: st.error(f"DB Error: {e}")
+            with tb2:
+                nu, np = st.text_input(t['new_id']), st.text_input(t['new_pwd'], type="password")
+                if st.button(t['confirm'], key="btn_reg", use_container_width=True):
+                    try:
+                        if supabase.table('app_users').select('*').eq('username', nu).execute().data: st.error(t['err'])
+                        else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
+                    except Exception as e: st.error(f"DB Error: {e}")
 
 elif st.session_state.current_page == "Settings":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
     st.markdown("---")
-    
-    st.markdown(f"### 🎨 {'Preferences' if t['sys_lang']=='English' else '偏好设置'}")
-    col_t, col_l = st.columns(2)
-    with col_t:
-        new_th = st.selectbox("Theme / 主题", ["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"], index=["🍎 苹果白 (Apple Light)", "🌌 暗夜黑 (Dark Mode)", "🍃 抹茶绿 (Nature Mint)"].index(st.session_state.theme))
-        if new_th != st.session_state.theme: st.session_state.theme = new_th; st.rerun()
-    with col_l:
-        new_la = st.selectbox("Language / 语言", ["🇨🇳 简体中文", "🇬🇧 English"], index=["🇨🇳 简体中文", "🇬🇧 English"].index(st.session_state.lang))
-        if new_la != st.session_state.lang: st.session_state.lang = new_la; st.rerun()
+    new_la = st.selectbox("Language / 语言", ["🇨🇳 简体中文", "🇬🇧 English"], index=["🇨🇳 简体中文", "🇬🇧 English"].index(st.session_state.lang))
+    if new_la != st.session_state.lang: st.session_state.lang = new_la; st.rerun()
 
 else:
     if st.button("← " + t['back']): st.session_state.current_page = "Home"; st.rerun()
