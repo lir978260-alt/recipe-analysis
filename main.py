@@ -55,9 +55,8 @@ i18n = {
         "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认",
         "unfav": "🤍 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下回复...", "send": "发送",
         "rec_dish": "🍲 推荐神仙菜品", "rec_ph": "输入菜名并回车进行搜索...", "voted": "⚠️ 你已经给这道菜投过票啦！", "votes": "票",
-        # 智能匹配模块词汇
         "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", 
-        "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库"
+        "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "AI Health Ecosystem", "login": "Login", "set": "Settings", "back": "Back to Home",
@@ -75,17 +74,42 @@ i18n = {
         "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm",
         "unfav": "🤍 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply", "reply_ph": "Write a reply...", "send": "Send",
         "rec_dish": "🍲 Recommend a Dish", "rec_ph": "Type dish name and press Enter...", "voted": "⚠️ You already voted for this dish!", "votes": "votes",
-        # 智能匹配模块词汇
         "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:", 
-        "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library"
+        "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)"
     }
 }
 t = i18n[st.session_state.lang]
 
-# 预设菜品数据源
+# ==========================================
+# 扩充：100款中英双语菜品系统库
+# ==========================================
 dish_library = {
-    "🇨🇳 简体中文": ["西红柿炒鸡蛋", "西红柿牛腩", "宫保鸡丁", "红烧肉", "清蒸鲈鱼", "麻婆豆腐", "青椒肉丝", "糖醋排骨", "蒜蓉西兰花", "酸菜鱼", "北京烤鸭", "回锅肉"],
-    "🇬🇧 English": ["Tomato and Egg Stir-fry", "Tomato Beef Brisket", "Kung Pao Chicken", "Braised Pork Belly", "Steamed Sea Bass", "Mapo Tofu", "Pepper Steak", "Sweet and Sour Spare Ribs", "Garlic Broccoli", "Sauerkraut Fish", "Peking Duck", "Twice-cooked Pork"]
+    "🇨🇳 简体中文": [
+        "西红柿炒鸡蛋", "西红柿牛腩", "宫保鸡丁", "红烧肉", "清蒸鲈鱼", "麻婆豆腐", "青椒肉丝", "糖醋排骨", "蒜蓉西兰花", "酸菜鱼", 
+        "北京烤鸭", "回锅肉", "鱼香肉丝", "水煮牛肉", "辣子鸡", "蒜薹炒肉", "地三鲜", "锅包肉", "蚂蚁上树", "葱爆羊肉", 
+        "孜然羊肉", "糖醋里脊", "木须肉", "韭菜炒鸡蛋", "番茄炒蛋", "紫菜蛋花汤", "酸辣汤", "排骨莲藕汤", "佛跳墙", "东坡肉", 
+        "白切鸡", "盐焗鸡", "烧鹅", "烤乳猪", "卤水拼盘", "干炒牛河", "扬州炒饭", "腊味煲仔饭", "菠萝咕噜肉", "避风塘炒蟹", 
+        "剁椒鱼头", "农家小炒肉", "毛氏红烧肉", "腊肉炒肉", "湘西外婆菜", "叫花鸡", "红烧狮子头", "盐水鸭", "大煮干丝", "松鼠鳜鱼", 
+        "西湖醋鱼", "龙井虾仁", "宫廷豌豆黄", "驴打滚", "老北京炸酱面", "羊肉泡馍", "陕西凉皮", "肉夹馍", "兰州牛肉面", "新疆大盘鸡", 
+        "烤包子", "手抓羊肉", "酥油茶", "糌粑", "云南汽锅鸡", "过桥米线", "柳州螺蛳粉", "桂林米粉", "广东肠粉", "水晶虾饺", 
+        "广式烧卖", "蜜汁叉烧包", "虎皮凤爪", "葡式蛋挞", "腊味萝卜糕", "荔湾艇仔粥", "核桃包", "金牌流沙包", "潮汕牛肉火锅", "重庆老火锅", 
+        "成都串串香", "四川冒菜", "乐山钵钵鸡", "万州烤鱼", "天津煎饼果子", "肉段烧茄子", "东北溜肉段", "东北杀猪菜", "小鸡炖蘑菇", "铁锅炖大鹅", 
+        "拔丝地瓜", "酱骨架", "葱烧海参", "油焖大虾", "九转大肠", "德州扒鸡", "爆炒腰花", "糖醋鲤鱼", "新疆烤肉串", "台湾卤肉饭", 
+        "客家三杯鸡", "沙茶牛肉", "蚝烙", "三杯鸭", "梅菜扣肉", "清炖羊肉", "手撕包菜", "酸辣土豆丝", "麻酱拌面", "红油抄手"
+    ],
+    "🇬🇧 English": [
+        "Tomato and Egg Stir-fry", "Tomato Beef Brisket", "Kung Pao Chicken", "Braised Pork Belly", "Steamed Sea Bass", "Mapo Tofu", "Pepper Steak", "Sweet and Sour Spare Ribs", "Garlic Broccoli", "Sauerkraut Fish", 
+        "Peking Duck", "Twice-cooked Pork", "Fish-Flavored Shredded Pork", "Poached Sliced Beef in Hot Chili Oil", "Spicy Diced Chicken", "Stir-fried Pork with Garlic Scapes", "Di San Xian", "Guo Bao Rou", "Ants Climbing a Tree", "Scallion Stir-fried Mutton", 
+        "Cumin Mutton", "Sweet and Sour Pork Tenderloin", "Moo Shu Pork", "Scrambled Eggs with Chives", "Scrambled Eggs with Tomato", "Seaweed and Egg Soup", "Hot and Sour Soup", "Pork Rib and Lotus Root Soup", "Buddha Jumps Over the Wall", "Dongpo Pork", 
+        "Boiled Chicken", "Salt Baked Chicken", "Roast Goose", "Roast Suckling Pig", "Braised Delicacies Platter", "Beef Chow Fun", "Yangzhou Fried Rice", "Claypot Rice with Cured Meat", "Sweet and Sour Pork with Pineapple", "Typhoon Shelter Fried Crab", 
+        "Steamed Fish Head with Hot Red Peppers", "Stir-fried Pork with Pepper", "Mao's Braised Pork", "Stir-fried Smoked Pork", "Xiangxi Grandma's Veggies", "Beggar's Chicken", "Braised Pork Balls in Brown Sauce", "Salted Duck", "Boiled Shredded Tofu", "Squirrel-shaped Mandarin Fish", 
+        "West Lake Fish in Vinegar Gravy", "Longjing Shrimp", "Imperial Pea Cake", "Glutinous Rice Rolls", "Noodles with Soybean Paste", "Pita Bread Soaked in Mutton Soup", "Cold Rice Noodles", "Roujiamo", "Lanzhou Beef Noodles", "Big Plate Chicken", 
+        "Baked Samosa", "Hand-Grabbed Mutton", "Butter Tea", "Tsampa", "Steam Pot Chicken", "Crossing the Bridge Noodles", "Luosifen", "Guilin Rice Noodles", "Rice Noodle Roll", "Har Gow", 
+        "Shumai", "BBQ Pork Bun", "Chicken Feet", "Egg Tart", "Turnip Cake", "Tingzai Porridge", "Walnut Bun", "Custard Bun", "Chaoshan Beef Hot Pot", "Chongqing Hot Pot", 
+        "Chuan Chuan Xiang", "Mao Cai", "Bobo Chicken", "Grilled Fish", "Jianbing Guozi", "Fried Pork Chunks with Eggplant", "Sautéed Pork Chunks", "Pork Stew", "Stewed Chicken with Mushrooms", "Iron Pot Stewed Goose", 
+        "Candied Sweet Potato", "Sauce Bone", "Scallion Braised Sea Cucumber", "Braised Prawns", "Braised Intestines in Brown Sauce", "Dezhou Braised Chicken", "Stir-fried Pork Kidney", "Sweet and Sour Carp", "Mutton Skewers", "Taiwanese Braised Pork Rice", 
+        "Hakka Three Cup Chicken", "Shacha Beef", "Oyster Omelette", "Three Cup Duck", "Braised Pork with Mustard Greens", "Stewed Mutton", "Hand-torn Cabbage", "Hot and Sour Shredded Potatoes", "Noodles with Sesame Paste", "Wontons in Chili Oil"
+    ]
 }
 
 @st.cache_resource
@@ -211,9 +235,6 @@ def m_community():
     st.subheader(t['c_t'])
     t1, t2 = st.tabs([t['c_t1'], t['c_t2']])
     
-    # -----------------------------------
-    # 升级逻辑：联想匹配与动态入库架构
-    # -----------------------------------
     with t1:
         top_dishes = supabase.table('dish_ranking').select('*').order('votes', desc=True).limit(5).execute().data
         if top_dishes:
@@ -227,7 +248,6 @@ def m_community():
             search_term = st.text_input("hidden_label", label_visibility="collapsed", placeholder=t['rec_ph'], key="dish_input")
             lib = dish_library[st.session_state.lang]
 
-            # 封装底层入库与状态机逻辑
             def submit_vote(dish_name):
                 try:
                     exist = supabase.table('dish_ranking').select('*').eq('dish_name', dish_name).execute().data
@@ -245,7 +265,6 @@ def m_community():
                         st.rerun()
                 except Exception as e: st.error(f"DB Error: {e}")
 
-            # 触发检索算法与渲染
             if search_term:
                 dish_clean = search_term.strip()
                 matches = [d for d in lib if dish_clean.lower() in d.lower()]
@@ -253,7 +272,7 @@ def m_community():
                 if matches:
                     st.caption(t['guess'])
                     cols = st.columns(4)
-                    for i, match in enumerate(matches[:4]): # 限制最多展示4个联想结果
+                    for i, match in enumerate(matches[:4]):
                         if cols[i%4].button(match, key=f"match_{i}", use_container_width=True): submit_vote(match)
                     
                     if dish_clean not in matches:
@@ -265,7 +284,9 @@ def m_community():
 
             st.write("\n")
             with st.expander(t['view_lib']):
-                st.markdown("、".join(lib) if st.session_state.lang == "🇨🇳 简体中文" else ", ".join(lib))
+                # 核心渲染逻辑：自动接管前端网格自适应排版
+                formatted_lib = "".join([f"<div style='flex: 1 0 21%; margin: 6px; padding: 12px; background-color: {c['card']}; border-radius: 12px; border: 1px solid rgba(0,0,0,0.06); text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.02); font-weight: 500;'>🍲 {d}</div>" for d in lib])
+                st.markdown(f"<div style='display: flex; flex-wrap: wrap; justify-content: space-between;'>{formatted_lib}</div>", unsafe_allow_html=True)
                 
         else: st.info(t['log_req'])
 
