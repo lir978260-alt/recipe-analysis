@@ -55,7 +55,10 @@ i18n = {
         "u_t": "👤 我的主页", "u_t1": "📜 历史发布", "u_t2": "⭐ 收藏夹",
         "err": "账号或密码错误", "suc": "操作成功", "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据",
         "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号", "new_pwd": "设置新密码", "confirm": "确认",
-        "unfav": "🤍 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下回复...", "send": "发送"
+        "unfav": "🤍 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复", "reply_ph": "写下回复...", "send": "发送",
+        # 新增推荐榜单词汇
+        "rec_dish": "🍲 推荐神仙菜品", "rec_btn": "👍 推荐/投票", "rec_ph": "输入你想推荐的菜名...", 
+        "voted": "⚠️ 你已经给这道菜投过票啦！", "votes": "票"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "AI Health Ecosystem", "login": "Login", "set": "Settings", "back": "Back to Home",
@@ -71,7 +74,10 @@ i18n = {
         "u_t": "👤 My Profile", "u_t1": "📜 My Posts", "u_t2": "⭐ Favorites",
         "err": "Invalid credentials", "suc": "Success", "out": "Logout", "reg": "Register", "no_data": "No data available",
         "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID", "new_pwd": "Create Password", "confirm": "Confirm",
-        "unfav": "🤍 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply", "reply_ph": "Write a reply...", "send": "Send"
+        "unfav": "🤍 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply", "reply_ph": "Write a reply...", "send": "Send",
+        # 新增推荐榜单词汇
+        "rec_dish": "🍲 Recommend a Dish", "rec_btn": "👍 Vote/Suggest", "rec_ph": "Enter dish name...", 
+        "voted": "⚠️ You already voted for this dish!", "votes": "votes"
     }
 }
 t = i18n[st.session_state.lang]
@@ -245,9 +251,51 @@ def m_health():
 def m_community():
     st.subheader(t['c_t'])
     t1, t2 = st.tabs([t['c_t1'], t['c_t2']])
+    
+    # 【核心重构】：菜品推荐排行榜功能
     with t1:
-        for i, p in enumerate(supabase.table('comments').select('*').order('likes', desc=True).limit(3).execute().data): 
-            st.success(f"🏆 NO.{i+1} {p['user_name']}\n\n{p['dish_name']}")
+        # 展示排名前5的神仙菜品
+        top_dishes = supabase.table('dish_ranking').select('*').order('votes', desc=True).limit(5).execute().data
+        if top_dishes:
+            for i, d in enumerate(top_dishes): 
+                st.success(f"🏆 NO.{i+1} **{d['dish_name']}** —— {d['votes']} {t['votes']}")
+        else:
+            st.info(t['no_data'])
+            
+        st.markdown("---")
+        st.markdown(f"#### {t['rec_dish']}")
+        
+        # 推荐菜品交互逻辑
+        if st.session_state.user:
+            c_input, c_btn = st.columns([3, 1])
+            new_dish = c_input.text_input("hidden_label", label_visibility="collapsed", placeholder=t['rec_ph'])
+            if c_btn.button(t['rec_btn'], use_container_width=True) and new_dish:
+                dish_clean = new_dish.strip()
+                if dish_clean:
+                    try:
+                        # 检查菜品是否已存在
+                        exist = supabase.table('dish_ranking').select('*').eq('dish_name', dish_clean).execute().data
+                        if exist:
+                            record = exist[0]
+                            voters = record.get('voted_by', [])
+                            if not isinstance(voters, list): voters = []
+                            # 查重防止重复投票
+                            if st.session_state.user in voters:
+                                st.warning(t['voted'])
+                            else:
+                                voters.append(st.session_state.user)
+                                supabase.table('dish_ranking').update({"votes": record['votes'] + 1, "voted_by": voters}).eq('id', record['id']).execute()
+                                st.rerun()
+                        else:
+                            # 插入新菜品
+                            supabase.table('dish_ranking').insert({"dish_name": dish_clean, "votes": 1, "voted_by": [st.session_state.user]}).execute()
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"DB Error: {e}")
+        else:
+            st.info(t['log_req'])
+
+    # 交流大厅保持原样，互不影响
     with t2:
         if st.session_state.user:
             with st.expander(t['pub']):
@@ -372,7 +420,6 @@ elif st.session_state.current_page == "Login":
                         else: supabase.table('app_users').insert({"username": nu, "password": np}).execute(); st.success(t['suc'])
                     except Exception as e: st.error(f"DB Error: {e}")
 
-# 【核心恢复】：重新加回主题切换与语言选项双列布局
 elif st.session_state.current_page == "Settings":
     if st.button(t['back']): st.session_state.current_page = "Home"; st.rerun()
     st.markdown("---")
