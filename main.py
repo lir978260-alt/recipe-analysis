@@ -113,9 +113,14 @@ dish_library = {
 }
 
 @st.cache_resource
-def init_db(): return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-try: supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
-except: st.error("Database connection failed."); st.stop()
+def init_db(): 
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+try: 
+    supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
+except: 
+    st.error("Database connection failed.")
+    st.stop()
 
 # ==========================================
 # 2. 自适应 CSS 引擎与色彩管理
@@ -151,16 +156,412 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 流式 AI 引擎调用层
+# 3. 流式 AI 引擎调用层 (防截断格式化)
 # ==========================================
 def ask_ai_stream(sys_p, usr_p, img=None):
     usr_p += f"\n\n[CRITICAL INSTRUCTION: You must strictly output your entire response in {t['sys_lang']}! Do not use any other language.]"
     model = "qwen-vl-plus" if img else "qwen-plus"
-    url, h = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    h = {
+        'Authorization': f'Bearer {api_key}', 
+        'Content-Type': 'application/json'
+    }
+    
     msg_content = [{"type": "text", "text": usr_p}]
-    if img: msg_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"}})
-    data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg_content}], "stream": True}
+    if img: 
+        img_b64 = base64.b64encode(img).decode('utf-8')
+        msg_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
+        
+    data = {
+        "model": model, 
+        "messages": [
+            {"role": "system", "content": sys_p}, 
+            {"role": "user", "content": msg_content}
+        ], 
+        "stream": True
+    }
+    
     try: 
         res = requests.post(url, headers=h, json=data, timeout=90, stream=True)
         for line in res.iter_lines():
-            if line and line.decode('utf-8').startswith('data: ') and line.decode('utf-8') != 'data
+            if line:
+                line_str = line.decode('utf-8')
+                # 拆分条件，防止代码超长被云端平台截断
+                if line_str.startswith('data: ') and line_str != 'data: [DONE]':
+                    try:
+                        chunk_str = line_str[6:]
+                        chunk = json.loads(chunk_str)
+                        delta = chunk['choices'][0]['delta'].get('content', '')
+                        if delta: 
+                            yield delta
+                    except: 
+                        pass
+    except Exception as e: 
+        yield f"\n\nAI Network Error: {str(e)}"
+
+
+def ask_ai_sync(sys_p, usr_p):
+    model = "qwen-plus"
+    url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    h = {
+        'Authorization': f'Bearer {api_key}', 
+        'Content-Type': 'application/json'
+    }
+    data = {
+        "model": model, 
+        "messages": [
+            {"role": "system", "content": sys_p}, 
+            {"role": "user", "content": usr_p}
+        ]
+    }
+    try: 
+        res = requests.post(url, headers=h, json=data, timeout=30)
+        return res.json()['choices'][0]['message']['content']
+    except: 
+        return "0"
+
+# ==========================================
+# 4. 核心模块函数
+# ==========================================
+def m_kitchen():
+    st.subheader(t['k_t'])
+    t1, t2 = st.tabs([t['k_t1'], t['k_t2']])
+    with t1:
+        c1, c2 = st.columns(2)
+        up = c1.file_uploader(t['up'], type=['jpg', 'png'], key="f1")
+        pref = c1.text_input(t['req'])
+        if up: 
+            c2.image(up, use_column_width=True)
+        if st.button(t['gen']) and up:
+            with st.spinner(t['think']):
+                res_stream = ask_ai_stream("You are a Master Chef.", f"Identify ingredients and generate a professional recipe. Preferences: {pref}", up.getvalue())
+                st.session_state['l_rec'] = st.write_stream(res_stream)
+        if st.session_state.get('l_rec') and st.session_state.user and st.button(t['fav']):
+            try: 
+                supabase.table('favorites').insert({"username": st.session_state.user, "recipe_content": st.session_state['l_rec']}).execute()
+                st.success(t['suc'])
+            except Exception as e: 
+                st.error(f"DB Error: {e}")
+    with t2:
+        up_nutri = st.file_uploader(t['up_opt'], type=['jpg', 'png'], key="f2")
+        if up_nutri: 
+            st.image(up_nutri, use_column_width=True)
+        q = st.text_area(t['ask'])
+        if st.button(t['confirm']) and q:
+            with st.spinner(t['think']): 
+                res_stream = ask_ai_stream("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None)
+                st.write_stream(res_stream)
+
+def m_health():
+    if not st.session_state.user: 
+        st.session_state.current_page = "Login"
+        st.rerun()
+    st.subheader(t['h_t'])
+    t1, t2 = st.tabs([t['h_t1'], t['h_t2']])
+    with t1:
+        with st.form("d_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            d = c1.date_input(t['d'], date.today())
+            w = c2.number_input(t['w'], min_value=20.0, value=40.0, step=0.1)
+            b = st.text_input(t['b'])
+            l = st.text_input(t['l'])
+            dn = st.text_input(t['dn'])
+            
+            if st.form_submit_button(t['sub'], type="primary"):
+                cal_str = ask_ai_sync("Nutrition Calculator", f"Estimate total calories. Return ONLY an integer: Breakfast:{b} Lunch:{l} Dinner:{dn}")
+                cal = int(''.join(filter(str.isdigit, cal_str)) or 0)
+                payload = {"username": st.session_state.user, "log_date": str(d), "weight": w, "calories": cal, "breakfast": b, "lunch": l, "dinner": dn}
+                try:
+                    if st.session_state.editing_id: 
+                        supabase.table('diet_logs').update(payload).eq('id', st.session_state.editing_id).execute()
+                        st.session_state.editing_id = None
+                    else: 
+                        supabase.table('diet_logs').insert(payload).execute()
+                    st.rerun()
+                except Exception as e: 
+                    st.error(f"DB Error: {e}")
+                    
+        logs_data = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date', desc=True).execute().data
+        for r in logs_data:
+            with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
+                st.write(f"{t['b']}:{r.get('breakfast','')} {t['l']}:{r.get('lunch','')} {t['dn']}:{r.get('dinner','')}")
+                ce, cd = st.columns(2)
+                if ce.button(t['edit'], key=f"e_{r['id']}"): 
+                    st.session_state.editing_id = r['id']
+                    st.rerun()
+                if cd.button(t['del'], key=f"d_{r['id']}"): 
+                    try: 
+                        supabase.table('diet_logs').delete().eq('id', r['id']).execute()
+                        st.rerun()
+                    except Exception as e: 
+                        st.error(f"DB Error: {e}")
+    with t2:
+        logs = supabase.table('diet_logs').select('*').eq('username', st.session_state.user).order('log_date').execute().data
+        if logs: 
+            df = pd.DataFrame(logs)
+            df['log_date'] = pd.to_datetime(df['log_date'])
+            df.set_index('log_date', inplace=True)
+            st.line_chart(df[['weight', 'calories']])
+        else: 
+            st.info(t['no_data'])
+
+def m_community():
+    st.subheader(t['c_t'])
+    t1, t2 = st.tabs([t['c_t1'], t['c_t2']])
+    
+    with t1:
+        top_dishes = supabase.table('dish_ranking').select('*').order('votes', desc=True).limit(5).execute().data
+        if top_dishes:
+            for i, d in enumerate(top_dishes): 
+                st.success(f"🏆 NO.{i+1} **{d['dish_name']}** —— {d['votes']} {t['votes']}")
+        else: 
+            st.info(t['no_data'])
+            
+        st.markdown("---")
+        st.markdown(f"#### {t['rec_dish']}")
+        
+        if st.session_state.user:
+            search_term = st.text_input("hidden_label", label_visibility="collapsed", placeholder=t['rec_ph'], key="dish_input")
+            lib = dish_library[st.session_state.lang]
+
+            def submit_vote(dish_name):
+                try:
+                    exist = supabase.table('dish_ranking').select('*').eq('dish_name', dish_name).execute().data
+                    if exist:
+                        record = exist[0]
+                        voters = record.get('voted_by', [])
+                        if not isinstance(voters, list): 
+                            voters = []
+                        if st.session_state.user in voters: 
+                            st.warning(t['voted'])
+                        else:
+                            voters.append(st.session_state.user)
+                            supabase.table('dish_ranking').update({"votes": record['votes'] + 1, "voted_by": voters}).eq('id', record['id']).execute()
+                            st.rerun()
+                    else:
+                        supabase.table('dish_ranking').insert({"dish_name": dish_name, "votes": 1, "voted_by": [st.session_state.user]}).execute()
+                        st.rerun()
+                except Exception as e: 
+                    st.error(f"DB Error: {e}")
+
+            if search_term:
+                dish_clean = search_term.strip()
+                matches = [d for d in lib if dish_clean.lower() in d.lower()]
+                
+                if matches:
+                    st.caption(t['guess'])
+                    cols = st.columns(4)
+                    for i, match in enumerate(matches[:4]):
+                        if cols[i%4].button(match, key=f"match_{i}", use_container_width=True): 
+                            submit_vote(match)
+                    
+                    if dish_clean not in matches:
+                        st.write("\n")
+                        if st.button(t['rec_custom'].format(dish_clean), use_container_width=True): 
+                            submit_vote(dish_clean)
+                else:
+                    st.caption(t['no_match'])
+                    if st.button(t['rec_custom'].format(dish_clean), use_container_width=True): 
+                        submit_vote(dish_clean)
+
+            st.write("\n")
+            with st.expander(t['view_lib']):
+                formatted_lib = "".join([f"<div style='flex: 1 0 21%; margin: 6px; padding: 12px; background-color: {c['card']}; border-radius: 12px; border: 1px solid rgba(0,0,0,0.06); text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.02); font-weight: 500;'>🍲 {d}</div>" for d in lib])
+                st.markdown(f"<div style='display: flex; flex-wrap: wrap; justify-content: space-between;'>{formatted_lib}</div>", unsafe_allow_html=True)
+                
+        else: 
+            st.info(t['log_req'])
+
+    with t2:
+        if st.session_state.user:
+            with st.expander(t['pub']):
+                tag_opts = ["#Daily", "#Diet", "#Yummy"] if t['sys_lang']=="English" else ["#日常", "#减脂", "#神仙菜"]
+                tag = st.selectbox(t['tag'], tag_opts)
+                dish = st.text_input(t['title_in'])
+                cont = st.text_area(t['desc_in'])
+                if st.button(t['confirm']) and dish:
+                    try: 
+                        supabase.table('comments').insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag, "replies": []}).execute()
+                        st.rerun()
+                    except Exception as e: 
+                        st.error(f"Publish Failed: {str(e)}")
+        else: 
+            st.info(t['log_req'])
+
+        comments_data = supabase.table('comments').select("*").order('id', desc=True).execute().data
+        for r in comments_data:
+            with st.container(border=True):
+                st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
+                
+                lk = r.get('liked_by') if isinstance(r.get('liked_by'), list) else []
+                has_liked = (st.session_state.user in lk) if st.session_state.user else False
+                
+                if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
+                    lk.append(st.session_state.user)
+                    try: 
+                        supabase.table('comments').update({"likes": int(r.get('likes', 0))+1, "liked_by": lk}).eq("id", r['id']).execute()
+                        st.rerun()
+                    except: 
+                        pass
+                
+                reps = r.get('replies') if isinstance(r.get('replies'), list) else []
+                if len(reps) > 0:
+                    st.markdown("---")
+                    for rep in reps: 
+                        st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
+                
+                if st.session_state.user:
+                    with st.expander(t['reply']):
+                        rep_text = st.text_input(t['reply_ph'], key=f"rt_{r['id']}")
+                        if st.button(t['send'], key=f"rs_{r['id']}") and rep_text:
+                            reps.append({"u": st.session_state.user, "t": rep_text})
+                            try: 
+                                supabase.table('comments').update({"replies": reps}).eq("id", r['id']).execute()
+                                st.rerun()
+                            except Exception as e: 
+                                st.error(f"Reply Failed: {e}")
+
+def m_user():
+    if not st.session_state.user: 
+        st.session_state.current_page = "Login"
+        st.rerun()
+        
+    st.subheader(t['u_t'])
+    t1, t2 = st.tabs([t['u_t1'], t['u_t2']])
+    with t1:
+        my_posts = supabase.table('comments').select('*').eq('author_username', st.session_state.user).order('id', desc=True).execute().data
+        if not my_posts: 
+            st.info(t['no_data'])
+        for p in my_posts: 
+            with st.container(border=True):
+                st.info(f"**{p['dish_name']}**\n{p['comment']}")
+                if st.button(t['del_post'], key=f"dp_{p['id']}"):
+                    try: 
+                        supabase.table('comments').delete().eq('id', p['id']).execute()
+                        st.rerun()
+                    except Exception as e: 
+                        st.error(f"Delete Failed: {e}")
+    with t2:
+        favs = supabase.table('favorites').select('*').eq('username', st.session_state.user).order('id', desc=True).execute().data
+        if not favs: 
+            st.info(t['no_data'])
+        for f in favs:
+            with st.container(border=True):
+                if f.get('recipe_content'): 
+                    with st.expander(t['fav']): 
+                        st.markdown(f['recipe_content'])
+                if st.button(t['unfav'], key=f"uf_{f['id']}"):
+                    try: 
+                        supabase.table('favorites').delete().eq('id', f['id']).execute()
+                        st.rerun()
+                    except Exception as e: 
+                        st.error(f"Unfavorite Failed: {e}")
+
+# ==========================================
+# 5. 路由导航与设置界面
+# ==========================================
+if st.session_state.current_page == "Home":
+    c_title, c_log, c_set = st.columns([8, 2, 2])
+    c_title.markdown(f"<h2 style='margin-top:-10px;'>{t['title']}</h2>", unsafe_allow_html=True)
+    if c_log.button(f"👤 {st.session_state.user}" if st.session_state.user else f"👤 {t['login']}", use_container_width=True): 
+        st.session_state.current_page = "Login"
+        st.rerun()
+    if c_set.button(f"⚙️ {t['set']}", use_container_width=True): 
+        st.session_state.current_page = "Settings"
+        st.rerun()
+    st.write("\n\n")
+    
+    c1, c2 = st.columns(2, gap="medium")
+    if c1.button(t['m1'], type="primary", use_container_width=True): 
+        st.session_state.current_page = "A"
+        st.rerun()
+    if c1.button(t['m2'], type="primary", use_container_width=True): 
+        st.session_state.current_page = "C"
+        st.rerun()
+    if c2.button(t['m3'], type="primary", use_container_width=True): 
+        st.session_state.current_page = "B"
+        st.rerun()
+    if c2.button(t['m4'], type="primary", use_container_width=True): 
+        st.session_state.current_page = "D"
+        st.rerun()
+
+elif st.session_state.current_page == "Login":
+    if st.button(t['back']): 
+        st.session_state.current_page = "Home"
+        st.rerun()
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.session_state.user:
+            st.success(f"{t['suc']}：{st.session_state.user}")
+            if st.button(t['out'], use_container_width=True): 
+                st.session_state.user = None
+                st.session_state.need_del_cookie = True
+                st.session_state.logout_flag = True
+                st.rerun()
+        else:
+            tb1, tb2 = st.tabs([t['login'], t['reg']])
+            with tb1:
+                u = st.text_input(t['id_in'])
+                p = st.text_input(t['pwd_in'], type="password")
+                if st.button(t['confirm'], key="btn_login", use_container_width=True):
+                    try:
+                        if supabase.table('app_users').select('*').eq('username', u).eq('password', p).execute().data: 
+                            st.session_state.user = u
+                            st.session_state.need_set_cookie = True
+                            st.session_state.logout_flag = False
+                            st.session_state.current_page = "Home"
+                            st.rerun()
+                        else: 
+                            st.error(t['err'])
+                    except Exception as e: 
+                        st.error(f"DB Error: {e}")
+            with tb2:
+                nu = st.text_input(t['new_id'])
+                np = st.text_input(t['new_pwd'], type="password")
+                if st.button(t['confirm'], key="btn_reg", use_container_width=True):
+                    try:
+                        if supabase.table('app_users').select('*').eq('username', nu).execute().data: 
+                            st.error(t['err'])
+                        else: 
+                            supabase.table('app_users').insert({"username": nu, "password": np}).execute()
+                            st.success(t['suc'])
+                    except Exception as e: 
+                        st.error(f"DB Error: {e}")
+
+elif st.session_state.current_page == "Settings":
+    if st.button(t['back']): 
+        st.session_state.current_page = "Home"
+        st.rerun()
+    st.markdown("---")
+    st.markdown(f"### ⚙️ {'Preferences' if t['sys_lang']=='English' else '偏好设置'}")
+    col_t, col_l = st.columns(2)
+    with col_t:
+        theme_opts = list(theme_colors.keys())
+        new_th = st.selectbox("Theme / 主题", theme_opts, index=theme_opts.index(st.session_state.theme))
+        if new_th != st.session_state.theme: 
+            st.session_state.theme = new_th
+            st.rerun()
+    with col_l:
+        lang_opts = ["🇨🇳 简体中文", "🇬🇧 English"]
+        new_la = st.selectbox("Language / 语言", lang_opts, index=lang_opts.index(st.session_state.lang))
+        if new_la != st.session_state.lang: 
+            st.session_state.lang = new_la
+            st.rerun()
+
+else:
+    if st.button("← " + t['back']): 
+        st.session_state.current_page = "Home"
+        st.rerun()
+    st.markdown("---")
+    
+    # 路由渲染
+    if st.session_state.current_page == "A":
+        m_kitchen()
+    elif st.session_state.current_page == "B":
+        m_health()
+    elif st.session_state.current_page == "C":
+        m_community()
+    elif st.session_state.current_page == "D":
+        m_user()
