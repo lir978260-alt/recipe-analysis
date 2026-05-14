@@ -1,6 +1,7 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 前端 UI 融合最新设计稿布局；Supabase / DashScope 核心底层逻辑完美保留。
+修复了 components.html 的 key 参数导致的 TypeError 报错。
 """
 from __future__ import annotations
 
@@ -585,10 +586,10 @@ def _require_login():
 
 
 def traffic_dots(uid: str) -> None:
-    # 彻底去除原有的红色关闭按钮，改用统一的银灰色保持中性规范
+    # 已移除引发 TypeError 的 key 参数，保持组件安全渲染
     h = 22
     w = 72
-    html = """
+    html_code = """
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:transparent;">
@@ -600,7 +601,7 @@ def traffic_dots(uid: str) -> None:
 </div>
 </body></html>
 """
-    components.html(html, height=h, width=w, scrolling=False, key=f"traffic_{uid}")
+    components.html(html_code, height=h, width=w, scrolling=False)
 
 
 def m_kitchen():
@@ -692,7 +693,6 @@ def m_health():
         with st.form("d_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             d = c1.date_input(t["d"], date.today())
-            # 【完美融合点】：此处体重最小值放宽为20.0，默认值已设为你要求的40.0
             w = c2.number_input(t["w"], min_value=20.0, value=40.0, step=0.1)
             b = st.text_input(t["b"])
             l = st.text_input(t["l"])
@@ -865,7 +865,6 @@ def m_community():
                     st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 【完美融合点】：此前的100款智能联想搜库与动态建库算法结合于此
         dish_q = st.session_state.pop("_dish_q", None)
         if dish_q and st.session_state.user:
             lib = dish_library[st.session_state.lang]
