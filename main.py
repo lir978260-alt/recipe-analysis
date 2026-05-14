@@ -2,6 +2,7 @@
 AI Health Ecosystem — Streamlit 网页端
 严格还原视频 UI 设计稿布局（无原生 Sidebar，完全基于列布局）
 完美融合所有后端核心功能（AI 流式生成、动态排行榜、百款菜品搜索库、数据管家等）
+新增：PDF 本地文件直接读取与免跳转原生下载功能。
 """
 from __future__ import annotations
 
@@ -104,6 +105,22 @@ def _team_images() -> list[Path]:
     return out
 
 
+# ---------- PDF 直接下载核心逻辑 ----------
+@st.cache_data(show_spinner=False)
+def generate_pdf_download_link(file_name: str, link_text: str) -> str:
+    """读取本地 PDF 文件，将其转为 Base64 并嵌入 <a> 标签，实现免跳转纯本地下载"""
+    # 优先在根目录找，其次去 static 目录找
+    pdf_path = ROOT / file_name
+    if not pdf_path.is_file():
+        pdf_path = STATIC / file_name
+        
+    if not pdf_path.is_file():
+        return f'<a class="dl-side-link" href="#" style="background:#999;cursor:not-allowed;" title="请将文件放在代码同级目录">{html.escape(link_text)} (文件未找到)</a>'
+        
+    b64_pdf = base64.b64encode(pdf_path.read_bytes()).decode("utf-8")
+    return f'<a class="dl-side-link" href="data:application/pdf;base64,{b64_pdf}" download="{file_name}">{html.escape(link_text)}</a>'
+
+
 # ---------- 页面状态与自适应配置 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
@@ -170,7 +187,7 @@ i18n = {
         "m3": "数据管理\n数据记录 + 热量计算",
         "c_t": "🏘️ 美食广场社区",
         "dl_hint": "如果你需要获取更多个性化的食谱……",
-        "dl_btn": "点击这里",
+        "dl_btn": "点击这里下载 PDF",
         "name_l": "名称",
         "acct_l": "账号",
         "k_t": "☁️ AI 智能后厨",
@@ -265,7 +282,7 @@ i18n = {
         "m3": "Data Manager\nRecord Data + Calculate Calories",
         "c_t": "🏘️ Community Square",
         "dl_hint": "If you need to download more recipe resources for personalized needs...",
-        "dl_btn": "click here",
+        "dl_btn": "Download PDF",
         "name_l": "Name",
         "acct_l": "Account",
         "k_t": "☁️ AI Kitchen",
@@ -393,30 +410,25 @@ except Exception:
 
 
 # ---------- 色彩与 CSS 核心配置 ----------
-# 设计主色（还原视频 UI 风格）
-SAGE_BG = "#e6f2e0"       # 网页全局背景浅绿色
-SIDE_BG = "#6b8f6f"       # 首页左侧悬浮导航深绿背景
-DEEP_GREEN = "#2f4a35"    # 组件标题块/按钮强调色
+SAGE_BG = "#e6f2e0"       
+SIDE_BG = "#6b8f6f"       
+DEEP_GREEN = "#2f4a35"    
 CREAM = "#f3f0e4"
 CHAT_MAIN_BG = "#c5d4b8"
 COMM_RANK_SIDEBAR = "#6b6e6b"
 RANK_CARD_BG = "#d8dcd8"
-RESOURCE_DOWNLOAD_URL = "https://c.wss.ink/f/jwbexvk2wer"
 
 st.markdown(
     f"""
 <style>
 header[data-testid="stHeader"], footer {{ visibility: hidden !important; height: 0 !important; }}
-/* 全局背景色 */
 .stApp {{ background: {SAGE_BG} !important; }}
 .block-container {{ max-width: 1280px !important; padding-top: 2rem !important; }}
 
-/* 按钮通用重置 */
 div[data-testid="stButton"] > button {{
   border-color: rgba(150,150,150,0.25) !important;
 }}
 
-/* 顶部 Pill 形态按钮 (Login, Signup, Language) */
 .pill-btn > button {{
   background: {DEEP_GREEN} !important;
   color: #fff !important;
@@ -425,7 +437,6 @@ div[data-testid="stButton"] > button {{
   padding: 0.35rem 0.9rem !important;
 }}
 
-/* 首页面左侧悬浮导航菜单的按钮 */
 .side-card button {{
   background: #ffffff !important;
   color: #1a1a1a !important;
@@ -441,7 +452,6 @@ div[data-testid="stButton"] > button {{
   background: #f0f0f0 !important;
 }}
 
-/* 左侧「点击这里」下载按钮链接 */
 a.dl-side-link {{
   display: block;
   width: 100%;
@@ -543,7 +553,6 @@ def _require_login():
 
 
 def traffic_dots(uid: str) -> None:
-    # macOS 风格装饰点（带点击返回 Home 的逻辑）
     h = 22
     w = 72
     html_code = """
@@ -567,11 +576,9 @@ def traffic_dots(uid: str) -> None:
 def m_kitchen():
     L, R = st.columns(2, gap="large")
     
-    # 强制对称的组件高度逻辑
     desc_style = f"margin-top:8px;background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;min-height:96px;box-sizing:border-box;"
     
     with L:
-        # 左侧标题区域（补齐右侧装饰点高度，实现对称）
         lh1, lh2 = st.columns([0.78, 0.22])
         with lh1:
             st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['vdg']}</div>", unsafe_allow_html=True)
@@ -581,7 +588,6 @@ def m_kitchen():
         st.markdown(f"<div style='{desc_style}'>{t['vdg_help']}</div>", unsafe_allow_html=True)
         
         up = st.file_uploader(t["up"], type=["jpg", "png"], key="f1")
-        # 多行文本框，锁定高度 120 像素，与右边完全对称
         pref = st.text_area(t["req"], height=120)
         
         if up:
@@ -667,7 +673,6 @@ def m_health():
         with st.form("d_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             d = c1.date_input(t["d"], date.today())
-            # 最小体重放宽为 20KG，默认为 40KG
             w = c2.number_input(t["w"], min_value=20.0, value=40.0, step=0.1)
             b = st.text_input(t["b"])
             l = st.text_input(t["l"])
@@ -1065,15 +1070,12 @@ def dlg_signup():
 
 # ---------- 原汁原味分栏渲染：完美契合视频 UI ----------
 def render_home():
-    # 核心：使用原生的列布局，左侧为导航，右侧为主页面
     side, main = st.columns([0.28, 0.72], gap="large")
     
     with side:
-        # 左侧悬浮导航深绿色容器
         st.markdown(f"<div style='background:{SIDE_BG};padding:14px;border-radius:14px;min-height:720px'>", unsafe_allow_html=True)
         st.markdown("### ")
         
-        # 导航按钮
         st.markdown('<div class="side-card">', unsafe_allow_html=True)
         _show_icon("kitchen", "ai_kitchen", "m1", width=36)
         if st.button(t["m1"], key="nav_m1", use_container_width=True):
@@ -1095,22 +1097,12 @@ def render_home():
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 下载提示与链接
         st.markdown(f"<div style='color:#fff;margin:12px 0 6px 0;font-size:0.95rem'>{t['dl_hint']}</div>", unsafe_allow_html=True)
-        dl1, dl2 = st.columns([0.82, 0.18], gap="small")
-        with dl1:
-            st.markdown(
-                f"<a class='dl-side-link' href='{html.escape(RESOURCE_DOWNLOAD_URL)}' "
-                "target='_blank' rel='noopener noreferrer'>"
-                f"{html.escape(t['dl_btn'])}</a>",
-                unsafe_allow_html=True,
-            )
-        with dl2:
-            cu = _icon_path("cursor")
-            if cu:
-                st.image(str(cu), width=34)
+        
+        # 使用动态生成的 PDF Base64 原生下载链接
+        pdf_link_html = generate_pdf_download_link("Daily Feast.pdf", t["dl_btn"])
+        st.markdown(pdf_link_html, unsafe_allow_html=True)
 
-        # 底部账户信息
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
         na1, na2 = st.columns([0.72, 0.28], gap="small")
         with na1:
@@ -1135,7 +1127,6 @@ def render_home():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with main:
-        # 顶部导航
         top = st.columns([5, 1, 1, 1, 1])
         top[0].markdown(
             f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>",
@@ -1177,7 +1168,6 @@ def render_home():
 
         st.caption("Group3 / Product Owner: TrungHieu Le")
 
-        # 团队简介图
         c0, c1, c2 = st.columns([1, 2, 1])
         with c1:
             if st.button(t["about"], use_container_width=True):
@@ -1209,7 +1199,6 @@ def render_home():
                     unsafe_allow_html=True,
                 )
 
-    # 弹窗
     if st.session_state.open_login:
         dlg_login()
     if st.session_state.open_signup:
@@ -1254,7 +1243,6 @@ elif st.session_state.current_page == "About":
     m_about()
 
 else:
-    # 渲染全屏的纯粹功能子页
     if st.session_state.current_page == "A":
         m_kitchen()
     elif st.session_state.current_page == "B":
