@@ -3,6 +3,7 @@ AI Health Ecosystem — Streamlit 网页端
 严格还原视频 UI 设计稿布局（无原生 Sidebar，完全基于列布局）
 完美融合所有后端核心功能（AI 流式生成、动态排行榜、百款菜品搜索库、数据管家等）
 新增：PDF 本地文件直接读取与免跳转原生下载功能。
+修复：彻底移除了 components.html 中的 key 参数，解决 TypeError 报错。
 """
 from __future__ import annotations
 
@@ -553,6 +554,7 @@ def _require_login():
 
 
 def traffic_dots(uid: str) -> None:
+    # 彻底修复了报错，移除了不被支持的 key 参数
     h = 22
     w = 72
     html_code = """
@@ -1068,7 +1070,6 @@ def dlg_signup():
             st.error(str(e))
 
 
-# ---------- 原汁原味分栏渲染：完美契合视频 UI ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
@@ -1099,7 +1100,6 @@ def render_home():
 
         st.markdown(f"<div style='color:#fff;margin:12px 0 6px 0;font-size:0.95rem'>{t['dl_hint']}</div>", unsafe_allow_html=True)
         
-        # 使用动态生成的 PDF Base64 原生下载链接
         pdf_link_html = generate_pdf_download_link("Daily Feast.pdf", t["dl_btn"])
         st.markdown(pdf_link_html, unsafe_allow_html=True)
 
