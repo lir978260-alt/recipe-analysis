@@ -1,7 +1,7 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-前端 UI 按设计稿布局（将功能栏移至侧边栏绿色框中）；应用原始颜色修改。
-静态资源：使用与本文件同目录下的 ./static/（team/ 用于 About；icon/ 可选，见下方命名约定）。
+严格还原视频 UI 设计稿布局（无原生 Sidebar，完全基于列布局）
+完美融合所有后端核心功能（AI 流式生成、动态排行榜、百款菜品搜索库、数据管家等）
 """
 from __future__ import annotations
 
@@ -19,22 +19,19 @@ import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
 
-# ---------- 静态资源路径（推荐：static 放在项目根目录下，与 app.py 同级） ----------
+# ---------- 静态资源路径 ----------
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 if not STATIC.is_dir():
-    # 兼容部署：若本地无 static，使用 fallback
     _desk = Path.home() / "Desktop" / "static"
     if _desk.is_dir():
         STATIC = _desk
 TEAM_DIR = STATIC / "team"
-# 可选：将 png/svg/ico/webp/jpg 放在 static/icon/，按文件名自动匹配（无则回退 emoji）
 ICON_DIR = STATIC / "icon"
 _ICON_EXTS = (".png", ".svg", ".webp", ".ico", ".jpg", ".jpeg")
 
 
 def _icon_path(*names: str) -> Path | None:
-    """在 ICON_DIR 下查找第一个存在的「名称 + 扩展名」文件。"""
     if not ICON_DIR.is_dir():
         return None
     for stem in names:
@@ -46,7 +43,6 @@ def _icon_path(*names: str) -> Path | None:
 
 
 def _page_icon_arg() -> str:
-    """浏览器标签图标：优先 static/icon 下的 favicon / icon / logo / app。"""
     hit = _icon_path("favicon") or _icon_path("icon") or _icon_path("logo") or _icon_path("app")
     return str(hit) if hit else "☁️"
 
@@ -74,7 +70,6 @@ def _icon_to_data_uri(p: Path) -> str:
 
 
 def _profile_avatar_html(username: str) -> str:
-    """头像 + 右下角 camera 图标（稿面叠层）。"""
     av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
     cam = _icon_path("camera")
     overlay = ""
@@ -96,7 +91,6 @@ def _profile_avatar_html(username: str) -> str:
 
 
 def _team_images() -> list[Path]:
-    """About 页面团伙图片路径。"""
     out: list[Path] = []
     for base in ("team", "time1", "time2"):
         hit = None
@@ -110,12 +104,12 @@ def _team_images() -> list[Path]:
     return out
 
 
-# ---------- 页面状态 ----------
+# ---------- 页面状态与自适应配置 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
     page_icon=_page_icon_arg(),
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="collapsed", # 彻底隐藏原生侧边栏
 )
 
 for k in ("user", "editing_id"):
@@ -123,9 +117,8 @@ for k in ("user", "editing_id"):
         st.session_state[k] = None
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Home"
-# 设计稿：首页初始为英文
 if "lang" not in st.session_state:
-    st.session_state.lang = "🇬🇧 English"
+    st.session_state.lang = "🇨🇳 简体中文"
 if "theme" not in st.session_state:
     st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
 
@@ -157,13 +150,12 @@ if saved_user and st.session_state.user is None and not st.session_state.logout_
     st.session_state.user = saved_user
     st.rerun()
 
-# 设计稿：红圆关闭 = 回首页（ URL 参数桥接 iframe 内点击）
 if st.query_params.get("_home") == "1":
     st.session_state.current_page = "Home"
     st.query_params.clear()
     st.rerun()
 
-# ---------- i18n ----------
+# ---------- 双语字典引擎 (i18n) ----------
 i18n = {
     "🇨🇳 简体中文": {
         "sys_lang": "简体中文",
@@ -358,93 +350,136 @@ i18n = {
 }
 t = i18n[st.session_state.lang]
 
-# ---------- 颜色和主题 (应用原始颜色修改) ----------
-# 主体应用颜色 (image_1.png 的背景、卡片)
-theme_colors = {
-    "☁️ 云朵白 (Cloud Light)": {"bg": "#fcfcfd", "card": "#ffffff", "text": "#1d1d1f"},
-    "🌌 暗夜黑 (Dark Mode)": {"bg": "#1c1c1e", "card": "#2c2c2e", "text": "#f5f5f7"},
-    "🍃 抹茶绿 (Nature Mint)": {"bg": "#f4fbf6", "card": "#ffffff", "text": "#2d3a33"},
-    "🌊 海洋蓝 (Ocean Blue)": {"bg": "#f4f9ff", "card": "#ffffff", "text": "#0a2540"},
+# ---------- 100款中英双语菜品系统库 ----------
+dish_library = {
+    "🇨🇳 简体中文": [
+        "西红柿炒鸡蛋", "西红柿牛腩", "宫保鸡丁", "红烧肉", "清蒸鲈鱼", "麻婆豆腐", "青椒肉丝", "糖醋排骨", "蒜蓉西兰花", "酸菜鱼",
+        "北京烤鸭", "回锅肉", "鱼香肉丝", "水煮牛肉", "辣子鸡", "蒜薹炒肉", "地三鲜", "锅包肉", "蚂蚁上树", "葱爆羊肉",
+        "孜然羊肉", "糖醋里脊", "木须肉", "韭菜炒鸡蛋", "番茄炒蛋", "紫菜蛋花汤", "酸辣汤", "排骨莲藕汤", "佛跳墙", "东坡肉",
+        "白切鸡", "盐焗鸡", "烧鹅", "烤乳猪", "卤水拼盘", "干炒牛河", "扬州炒饭", "腊味煲仔饭", "菠萝咕噜肉", "避风塘炒蟹",
+        "剁椒鱼头", "农家小炒肉", "毛氏红烧肉", "腊肉炒肉", "湘西外婆菜", "叫花鸡", "红烧狮子头", "盐水鸭", "大煮干丝", "松鼠鳜鱼",
+        "西湖醋鱼", "龙井虾仁", "宫廷豌豆黄", "驴打滚", "老北京炸酱面", "羊肉泡馍", "陕西凉皮", "肉夹馍", "兰州牛肉面", "新疆大盘鸡",
+        "烤包子", "手抓羊肉", "酥油茶", "糌粑", "云南汽锅鸡", "过桥米线", "柳州螺蛳粉", "桂林米粉", "广东肠粉", "水晶虾饺",
+        "广式烧卖", "蜜汁叉烧包", "虎皮凤爪", "葡式蛋挞", "腊味萝卜糕", "荔湾艇仔粥", "核桃包", "金牌流沙包", "潮汕牛肉火锅", "重庆老火锅",
+        "成都串串香", "四川冒菜", "乐山钵钵鸡", "万州烤鱼", "天津煎饼果子", "肉段烧茄子", "东北溜肉段", "东北杀猪菜", "小鸡炖蘑菇", "铁锅炖大鹅",
+        "拔丝地瓜", "酱骨架", "葱烧海参", "油焖大虾", "九转大肠", "德州扒鸡", "爆炒腰花", "糖醋鲤鱼", "新疆烤肉串", "台湾卤肉饭",
+        "客家三杯鸡", "沙茶牛肉", "蚝烙", "三杯鸭", "梅菜扣肉", "清炖羊肉", "手撕包菜", "酸辣土豆丝", "麻酱拌面", "红油抄手",
+    ],
+    "🇬🇧 English": [
+        "Tomato and Egg Stir-fry", "Tomato Beef Brisket", "Kung Pao Chicken", "Braised Pork Belly", "Steamed Sea Bass", "Mapo Tofu", "Pepper Steak", "Sweet and Sour Spare Ribs", "Garlic Broccoli", "Sauerkraut Fish",
+        "Peking Duck", "Twice-cooked Pork", "Fish-Flavored Shredded Pork", "Poached Sliced Beef in Hot Chili Oil", "Spicy Diced Chicken", "Stir-fried Pork with Garlic Scapes", "Di San Xian", "Guo Bao Rou", "Ants Climbing a Tree", "Scallion Stir-fried Mutton",
+        "Cumin Mutton", "Sweet and Sour Pork Tenderloin", "Moo Shu Pork", "Scrambled Eggs with Chives", "Scrambled Eggs with Tomato", "Seaweed and Egg Soup", "Hot and Sour Soup", "Pork Rib and Lotus Root Soup", "Buddha Jumps Over the Wall", "Dongpo Pork",
+        "Boiled Chicken", "Salt Baked Chicken", "Roast Goose", "Roast Suckling Pig", "Braised Delicacies Platter", "Beef Chow Fun", "Yangzhou Fried Rice", "Claypot Rice with Cured Meat", "Sweet and Sour Pork with Pineapple", "Typhoon Shelter Fried Crab",
+        "Steamed Fish Head with Hot Red Peppers", "Stir-fried Pork with Pepper", "Mao's Braised Pork", "Stir-fried Smoked Pork", "Xiangxi Grandma's Veggies", "Beggar's Chicken", "Braised Pork Balls in Brown Sauce", "Salted Duck", "Boiled Shredded Tofu", "Squirrel-shaped Mandarin Fish",
+        "West Lake Fish in Vinegar Gravy", "Longjing Shrimp", "Imperial Pea Cake", "Glutinous Rice Rolls", "Noodles with Soybean Paste", "Pita Bread Soaked in Mutton Soup", "Cold Rice Noodles", "Roujiamo", "Lanzhou Beef Noodles", "Big Plate Chicken",
+        "Baked Samosa", "Hand-Grabbed Mutton", "Butter Tea", "Tsampa", "Steam Pot Chicken", "Crossing the Bridge Noodles", "Luosifen", "Guilin Rice Noodles", "Rice Noodle Roll", "Har Gow",
+        "Shumai", "BBQ Pork Bun", "Chicken Feet", "Egg Tart", "Turnip Cake", "Tingzai Porridge", "Walnut Bun", "Custard Bun", "Chaoshan Beef Hot Pot", "Chongqing Hot Pot",
+        "Chuan Chuan Xiang", "Mao Cai", "Bobo Chicken", "Grilled Fish", "Jianbing Guozi", "Fried Pork Chunks with Eggplant", "Sautéed Pork Chunks", "Pork Stew", "Stewed Chicken with Mushrooms", "Iron Pot Stewed Goose",
+        "Candied Sweet Potato", "Sauce Bone", "Scallion Braised Sea Cucumber", "Braised Prawns", "Braised Intestines in Brown Sauce", "Dezhou Braised Chicken", "Stir-fried Pork Kidney", "Sweet and Sour Carp", "Mutton Skewers", "Taiwanese Braised Pork Rice",
+        "Hakka Three Cup Chicken", "Shacha Beef", "Oyster Omelette", "Three Cup Duck", "Braised Pork with Mustard Greens", "Stewed Mutton", "Hand-torn Cabbage", "Hot and Sour Shredded Potatoes", "Noodles with Sesame Paste", "Wontons in Chili Oil",
+    ],
 }
-c = theme_colors[st.session_state.theme]
 
-# 设计主色（侧边栏、Deep Green 卡片等，如 image_0/image_4.png 所示）
-SIDE_BG = "#6b8f6f"  # 侧边栏整体背景（ image_6.png 的绿色）
-DEEP_GREEN = "#2f4a35"  # 侧边栏、主区提示卡片等
-CHAT_MAIN_BG = "#c5d4b8"  # 社区橄榄浅绿
-RANK_CARD_BG = "#d8dcd8"  # 社区排行榜灰色卡片底
-RESOURCE_DOWNLOAD_URL = "https://c.wss.ink/f/jwbexvk2wer"  # 侧栏「点击这里」下载链接
 
-st.markdown(
-    f"""
-<style>
-header[data-testid="stHeader"], footer {{ visibility: hidden !important; height: 0 !important; }}
-.stApp {{ background: {SIDE_BG} !important; }}  /* st.sidebar 圆角绿框：将 st.sidebar 背景色作为应用背景，实现视觉上移动 */
-.block-container {{ max-width: 1280px !important; padding-top: 0.5rem !important; }}
-
-/* 覆盖 st.button 默认样式：使其在侧边栏显示为白底黑字卡片（image_5.png ） */
-[data-testid="stSidebar"] div[data-testid="stButton"] > button {{
-    color: {c['text']} !important;
-    background-color: {c['card']} !important;
-    border-color: rgba(150,150,150,0.25) !important;
-    border-radius: 12px !important;
-    padding: 12px !important;
-    text-align: left !important;
-    display: block !important;
-    width: 100% !important;
-    line-height: 1.2 !important;
-    cursor: pointer !important;
-    margin-bottom: 12px !important;
-}}
-[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {{
-    background-color: #f5f5f5 !important;
-}}
-
-/* 側邊欄自定義 CSS 樣式：白底黑字導航卡片文本文本 */
-.side-card-title {{
-    font-weight: 700;
-    font-size: 1.1rem;
-    margin-bottom: 4px;
-    display: block;
-}}
-.side-card-text {{
-    font-size: 0.95rem;
-    opacity: 0.85;
-    display: block;
-}}
-
-/* 側邊欄「下载链接」自定義樣式 */
-a.dl-side-link {{
-    display: block;
-    width: 100%;
-    background: {DEEP_GREEN};
-    color: #fff !important;
-    text-align: center;
-    border-radius: 12px;
-    padding: 10px 14px;
-    text-decoration: none !important;
-    font-weight: 600;
-    box-sizing: border-box;
-}}
-a.dl-side-link:hover {{
-    filter: brightness(1.08);
-}}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-# ---------- 初始化数据库和 AI (与代码一致) ----------
 @st.cache_resource
 def init_db():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-
 
 try:
     supabase, api_key = init_db(), st.secrets["ALIYUN_API_KEY"]
 except Exception:
     st.error("Database connection failed.")
     st.stop()
+
+
+# ---------- 色彩与 CSS 核心配置 ----------
+# 设计主色（还原视频 UI 风格）
+SAGE_BG = "#e6f2e0"       # 网页全局背景浅绿色
+SIDE_BG = "#6b8f6f"       # 首页左侧悬浮导航深绿背景
+DEEP_GREEN = "#2f4a35"    # 组件标题块/按钮强调色
+CREAM = "#f3f0e4"
+CHAT_MAIN_BG = "#c5d4b8"
+COMM_RANK_SIDEBAR = "#6b6e6b"
+RANK_CARD_BG = "#d8dcd8"
+RESOURCE_DOWNLOAD_URL = "https://c.wss.ink/f/jwbexvk2wer"
+
+st.markdown(
+    f"""
+<style>
+header[data-testid="stHeader"], footer {{ visibility: hidden !important; height: 0 !important; }}
+/* 全局背景色 */
+.stApp {{ background: {SAGE_BG} !important; }}
+.block-container {{ max-width: 1280px !important; padding-top: 2rem !important; }}
+
+/* 按钮通用重置 */
+div[data-testid="stButton"] > button {{
+  border-color: rgba(150,150,150,0.25) !important;
+}}
+
+/* 顶部 Pill 形态按钮 (Login, Signup, Language) */
+.pill-btn > button {{
+  background: {DEEP_GREEN} !important;
+  color: #fff !important;
+  border-radius: 999px !important;
+  border: none !important;
+  padding: 0.35rem 0.9rem !important;
+}}
+
+/* 首页面左侧悬浮导航菜单的按钮 */
+.side-card button {{
+  background: #ffffff !important;
+  color: #1a1a1a !important;
+  border-radius: 12px !important;
+  min-height: 70px !important;
+  white-space: pre-wrap !important;
+  text-align: left !important;
+  border: none !important;
+  font-weight: bold !important;
+  margin-bottom: 8px !important;
+}}
+.side-card button:hover {{
+  background: #f0f0f0 !important;
+}}
+
+/* 左侧「点击这里」下载按钮链接 */
+a.dl-side-link {{
+  display: block;
+  width: 100%;
+  background: {DEEP_GREEN};
+  color: #fff !important;
+  text-align: center;
+  border-radius: 12px;
+  padding: 10px 14px;
+  text-decoration: none !important;
+  font-weight: 600;
+  box-sizing: border-box;
+}}
+a.dl-side-link:hover {{ filter: brightness(1.08); }}
+
+.footer-bar {{
+  background: {DEEP_GREEN};
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-top: 8px;
+}}
+.masonry {{ column-count: 4; column-gap: 10px; }}
+@media (max-width: 1100px) {{ .masonry {{ column-count: 2; }} }}
+.card-brick {{
+  break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06);
+}}
+.rank-row {{
+  background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between;
+}}
+.chat-head {{
+  background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em;
+}}
+.chart-box {{ background: #5a5a5a; border-radius: 12px; padding: 8px; min-height: 220px; }}
+.profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
+.section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 
 def ask_ai_stream(sys_p, usr_p, img=None):
@@ -456,7 +491,15 @@ def ask_ai_stream(sys_p, usr_p, img=None):
     if img:
         img_b64 = base64.b64encode(img).decode("utf-8")
         msg_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
-    data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": msg_content}], "stream": True}
+    
+    data = {
+        "model": model, 
+        "messages": [
+            {"role": "system", "content": sys_p}, 
+            {"role": "user", "content": msg_content}
+        ], 
+        "stream": True
+    }
     try:
         res = requests.post(url, headers=h, json=data, timeout=90, stream=True)
         for line in res.iter_lines():
@@ -464,7 +507,8 @@ def ask_ai_stream(sys_p, usr_p, img=None):
                 line_str = line.decode("utf-8")
                 if line_str.startswith("data: ") and line_str != "data: [DONE]":
                     try:
-                        chunk = json.loads(line_str[6:])
+                        chunk_str = line_str[6:]
+                        chunk = json.loads(chunk_str)
                         delta = chunk["choices"][0]["delta"].get("content", "")
                         if delta:
                             yield delta
@@ -478,7 +522,13 @@ def ask_ai_sync(sys_p, usr_p):
     model = "qwen-plus"
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     h = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    data = {"model": model, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": usr_p}]}
+    data = {
+        "model": model, 
+        "messages": [
+            {"role": "system", "content": sys_p}, 
+            {"role": "user", "content": usr_p}
+        ]
+    }
     try:
         res = requests.post(url, headers=h, json=data, timeout=30)
         return res.json()["choices"][0]["message"]["content"]
@@ -492,107 +542,48 @@ def _require_login():
     st.rerun()
 
 
-# ---------- 侧边栏 (绿色框 + 功能卡片组) ----------
-def render_sidebar():
-    """将 image_5.png 中的功能导航移至侧边栏绿色框（image_6.png背景）中。"""
-    with st.sidebar:
-        # 使用自定义 CSS 为侧边栏按钮建立样式，文本包含卡文本和功能
-        
-        # 功能栏 1 (AI Kitchen)
-        title_a = "AI 智能厨房"
-        text_a = "可视化食谱生成 + 专家问答"
-        if st.button(f"{title_a}\n{text_a}", key="nav_m1_nav", help=title_a, use_container_width=True):
-            st.session_state.current_page = "A"
-            st.rerun()
-
-        # 功能栏 2 (Community)
-        title_c = "美食社区"
-        text_c = "排行榜 + 交流大厅"
-        if st.button(f"{title_c}\n{text_c}", key="nav_m2_nav", help=title_c, use_container_width=True):
-            st.session_state.current_page = "C"
-            st.rerun()
-
-        # 功能栏 3 (Health Tracker)
-        title_b = "数据管理"
-        text_b = "数据记录 + 热量计算"
-        if st.button(f"{title_b}\n{text_b}", key="nav_m3_nav", help=title_b, use_container_width=True):
-            st.session_state.current_page = "B"
-            st.rerun()
-
-        # 功能栏 4：食谱下载链接 ( image_5.png 最后一个框)
-        st.markdown(
-            f"""
-            <div style="background-color: #ffffff; color: #1a1a1a; border-radius: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.06);">
-                <div class='side-card-text'>如果你需要获取更多个性化的食谱……</div>
-                <a class="dl-side-link" href="{html.escape(RESOURCE_DOWNLOAD_URL)}" target="_blank" rel="noopener noreferrer">{html.escape(t["dl_btn"])}</a>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # 功能栏 5：账户 ( image_5.png 原设计中側欄底部，保留)
-        title_u = "账户"
-        text_u = "我的主页 / 登录"
-        if st.button(f"{title_u}\n{text_u}", key="side_user_nav", help=title_u, use_container_width=True):
-            if st.session_state.user:
-                st.session_state.current_page = "D"
-            else:
-                st.session_state.open_login = True
-            st.rerun()
-
-    # 应用自定义 CSS 以使 st.button 变白底黑字卡片，而不仅在侧栏。
-    st.markdown(
-        f"""
-<style>
-[data-testid="stSidebar"] div[data-testid="stButton"] > button {{
-    color: {c['text']} !important;
-    background-color: {c['card']} !important;
-    border-color: rgba(150,150,150,0.25) !important;
-    border-radius: 12px !important;
-    padding: 12px !important;
-    text-align: left !important;
-    display: block !important;
-    width: 100% !important;
-    line-height: 1.2 !important;
-    cursor: pointer !important;
-    margin-bottom: 12px !important;
-}}
-</style>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-# ---------- 核心功能页面 ( m_kitchen, m_health 等，与代码一致) ----------
 def traffic_dots(uid: str) -> None:
-    # 装饰用红黄绿 macOS 三色圆点（image_4.png ）
+    # macOS 风格装饰点（带点击返回 Home 的逻辑）
     h = 22
     w = 72
-    html = """
+    html_code = """
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:transparent;">
 <div style="display:flex;align-items:center;gap:7px;height:22px;padding:0 2px;">
-<span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;display:inline-block;box-shadow:0 1px 2px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.35);"></span>
+<button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#d1d1d1;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.35);"
+  onclick="(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"></button>
 <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;display:inline-block;box-shadow:0 1px 2px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.4);"></span>
 <span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;display:inline-block;box-shadow:0 1px 2px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.35);"></span>
 </div>
 </body></html>
 """
-    components.html(html, height=h, width=w, scrolling=False, key=f"traffic_{uid}")
+    components.html(html_code, height=h, width=w, scrolling=False)
 
 
+# ==========================================
+# 核心功能页面区
+# ==========================================
 def m_kitchen():
-    # 页头
-    st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['vdg']}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='margin-top:8px;background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:12px;font-size:0.95rem'>{t['vdg_help']}</div>", unsafe_allow_html=True)
-    
     L, R = st.columns(2, gap="large")
+    
+    # 强制对称的组件高度逻辑
+    desc_style = f"margin-top:8px;background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;min-height:96px;box-sizing:border-box;"
+    
     with L:
-        # 可视化食谱生成
-        st.empty()
+        # 左侧标题区域（补齐右侧装饰点高度，实现对称）
+        lh1, lh2 = st.columns([0.78, 0.22])
+        with lh1:
+            st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['vdg']}</div>", unsafe_allow_html=True)
+        with lh2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            
+        st.markdown(f"<div style='{desc_style}'>{t['vdg_help']}</div>", unsafe_allow_html=True)
+        
         up = st.file_uploader(t["up"], type=["jpg", "png"], key="f1")
-        pref = st.text_input(t["req"])
+        # 多行文本框，锁定高度 120 像素，与右边完全对称
+        pref = st.text_area(t["req"], height=120)
+        
         if up:
             st.image(up, use_column_width=True)
         if st.button(t["gen"], use_container_width=True) and up:
@@ -609,21 +600,23 @@ def m_kitchen():
                 st.success(t["suc"])
             except Exception as e:
                 st.error(f"DB Error: {e}")
+                
     with R:
-        # 专家问答
         rh1, rh2 = st.columns([0.78, 0.22])
         with rh1:
-            st.empty()
+            st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['eqa']}</div>", unsafe_allow_html=True)
         with rh2:
             st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
             traffic_dots("kitchen_eq")
             st.markdown("</div>", unsafe_allow_html=True)
-        # Deep Green 提示卡
-        st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:12px;font-size:0.95rem'>{t['eqaHelp']}</div>", unsafe_allow_html=True)
+            
+        st.markdown(f"<div style='{desc_style}'>{t['eqa_help']}</div>", unsafe_allow_html=True)
+        
         up_nutri = st.file_uploader(t["up_opt"], type=["jpg", "png"], key="f2")
+        q = st.text_area(t["ask"], height=120)
+        
         if up_nutri:
             st.image(up_nutri, use_column_width=True)
-        q = st.text_area(t["ask"])
         if st.button(t["confirm"], use_container_width=True) and q:
             with st.spinner(t["think"]):
                 res_stream = ask_ai_stream("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None)
@@ -633,12 +626,10 @@ def m_kitchen():
 def m_health():
     if not st.session_state.user:
         _require_login()
-    # 页头提示卡
     st.markdown(
         f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;margin-bottom:10px'>{t['h_banner']}</div>",
         unsafe_allow_html=True,
     )
-    # 稿面装饰点
     ht1, ht2 = st.columns([0.09, 0.91])
     with ht1:
         traffic_dots("health_win")
@@ -663,7 +654,6 @@ def m_health():
                         st.error(str(e))
     with right:
         st.markdown(f"<div class='chart-box'>", unsafe_allow_html=True)
-        # 获取分析数据
         logs = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date").execute().data
         if logs:
             df = pd.DataFrame(logs)
@@ -677,7 +667,8 @@ def m_health():
         with st.form("d_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             d = c1.date_input(t["d"], date.today())
-            w = c2.number_input(t["w"], min_value=20.0, value=60.0, step=0.1)
+            # 最小体重放宽为 20KG，默认为 40KG
+            w = c2.number_input(t["w"], min_value=20.0, value=40.0, step=0.1)
             b = st.text_input(t["b"])
             l = st.text_input(t["l"])
             dn = st.text_input(t["dn"])
@@ -708,7 +699,6 @@ def m_health():
 
 
 def _submit_vote(dish_name: str):
-    """美食排行榜投票处理逻辑。"""
     try:
         exist = supabase.table("dish_ranking").select("*").eq("dish_name", dish_name).execute().data
         if exist:
@@ -730,13 +720,11 @@ def _submit_vote(dish_name: str):
 
 
 def m_community():
-    # image_0.png 布局
     rank_col, main_col = st.columns([1, 3], gap="medium")
     with rank_col:
-        # 左侧灰栏
         st.markdown(
             f"<div style='background:{COMM_RANK_SIDEBAR};border-radius:12px;padding:12px 10px 10px 10px;margin-bottom:8px'>"
-            f"<div style='font-family:Georgia,serif;font-weight:700;color:#fafafa;margin:0'>{t['cRank']}</div></div>",
+            f"<div style='font-family:Georgia,serif;font-weight:700;color:#fafafa;margin:0'>{t['c_rank']}</div></div>",
             unsafe_allow_html=True,
         )
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
@@ -750,24 +738,17 @@ def m_community():
                         unsafe_allow_html=True,
                     )
                 with row_r:
-                    # 投票心形
                     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                     hp = _icon_path("heart")
                     if hp:
                         st.image(str(hp), width=26)
                     if st.session_state.user:
-                        if st.button(
-                            " " if hp else "♥",
-                            key=f"hv_{d['id']}",
-                            help=t["cVote"],
-                            use_container_width=True,
-                        ):
+                        if st.button(" " if hp else "♥", key=f"hv_{d['id']}", help=t["c_vote"], use_container_width=True):
                             _submit_vote(d["dish_name"])
         else:
             st.info(t["no_data"])
 
     with main_col:
-        # 右侧橄榄绿区
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         cd1, cd2 = st.columns([0.12, 0.88])
         with cd1:
@@ -775,7 +756,6 @@ def m_community():
         with cd2:
             st.empty()
 
-        # 砌体布局砖块（ image_0.png ）
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
         parts = [
             f"<div style='background:{CHAT_MAIN_BG};padding:12px;border-radius:12px;margin-top:4px;'><div class='masonry'>"
@@ -791,7 +771,6 @@ def m_community():
         parts.append("</div></div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
 
-        # 帖子互动
         st.markdown(f"**{t['c_t2']}**")
         for r in comments_data:
             with st.container(border=True):
@@ -805,7 +784,6 @@ def m_community():
                         st.rerun()
                     except Exception:
                         pass
-                # 回复
                 reps = r.get("replies") if isinstance(r.get("replies"), list) else []
                 if reps:
                     st.markdown("---")
@@ -813,7 +791,7 @@ def m_community():
                         st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
                 if st.session_state.user:
                     with st.expander(t["reply"]):
-                        rep_text = st.text_input(t["replyPh"], key=f"rt_{r['id']}")
+                        rep_text = st.text_input(t["reply_ph"], key=f"rt_{r['id']}")
                         if st.button(t["send"], key=f"rs_{r['id']}") and rep_text:
                             reps.append({"u": st.session_state.user, "t": rep_text})
                             try:
@@ -822,7 +800,6 @@ def m_community():
                             except Exception as e:
                                 st.error(str(e))
 
-        # 底部栏（ image_0.png ）
         st.markdown("<div class='footer-bar'>", unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns([4, 1, 2, 1])
         with fc1:
@@ -834,15 +811,15 @@ def m_community():
                         st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
                         st.image(str(sp), width=22)
                     with sinp:
-                        q = st.text_input("q", label_visibility="collapsed", placeholder=t["searchPh"], key="comm_search")
+                        q = st.text_input("q", label_visibility="collapsed", placeholder=t["search_ph"], key="comm_search")
                 else:
-                    q = st.text_input("q", label_visibility="collapsed", placeholder=t["searchPh"], key="comm_search")
+                    q = st.text_input("q", label_visibility="collapsed", placeholder=t["search_ph"], key="comm_search")
             else:
-                st.caption(t["logReq"])
+                st.caption(t["log_req"])
                 q = ""
         with fc2:
             st.write("")
-            if st.session_state.user and st.button(t["searchGo"], key="comm_go"):
+            if st.session_state.user and st.button(t["search_go"], key="comm_go"):
                 st.session_state["_dish_q"] = st.session_state.get("comm_search", "")
         with fc3:
             if st.session_state.user and st.button(t["nf_add"], key="nfadd"):
@@ -858,7 +835,6 @@ def m_community():
                     st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 搜索结果/建库（ image_0.png ）
         dish_q = st.session_state.pop("_dish_q", None)
         if dish_q and st.session_state.user:
             lib = dish_library[st.session_state.lang]
@@ -870,13 +846,12 @@ def m_community():
                 for i, match in enumerate(matches[:4]):
                     if cols[i % 4].button(match, key=f"match_{i}", use_container_width=True):
                         _submit_vote(match)
-                if dish_clean not in matches and st.button(t["recCustom"].format(dish_clean), use_container_width=True):
+                if dish_clean not in matches and st.button(t["rec_custom"].format(dish_clean), use_container_width=True):
                     _submit_vote(dish_clean)
             else:
                 st.caption(t["no_match"])
-                if st.button(t["recCustom"].format(dish_clean), key="rec_cust", use_container_width=True):
+                if st.button(t["rec_custom"].format(dish_clean), key="rec_cust", use_container_width=True):
                     _submit_vote(dish_clean)
-            # 库
             with st.expander(t["view_lib"]):
                 formatted_lib = "".join(
                     [
@@ -889,8 +864,7 @@ def m_community():
 
 @st.dialog(t["pub"])
 def dlg_publish():
-    """发布动态弹窗（砌体砖块）。"""
-    tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sysLang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
+    tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sys_lang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
     tag = st.selectbox(t["tag"], tag_opts)
     dish = st.text_input(t["title_in"])
     cont = st.text_area(t["desc_in"])
@@ -921,7 +895,6 @@ def dlg_publish():
 
 @st.dialog(t["new_pwd_title"])
 def dlg_pw():
-    """修改密码弹窗。"""
     npw = st.text_input(t["new_pwd"], type="password")
     a1, a2 = st.columns(2)
     if a1.button(t["close"]):
@@ -938,7 +911,6 @@ def dlg_pw():
 
 
 def _save_profile_name(key: str):
-    """保存用户主页修改后的显示名称。"""
     if not st.session_state.user:
         return
     nv = (st.session_state.get(key) or "").strip()
@@ -947,7 +919,6 @@ def _save_profile_name(key: str):
     try:
         supabase.table("app_users").update({"profile_name": nv}).eq("username", st.session_state.user).execute()
     except Exception:
-        # 若 Supabase 无 profile_name 字段则会回退。本代码保持原逻辑。
         st.session_state["_profile_warn"] = "如需保存姓名，请在 Supabase 的 app_users 表添加 profile_name (text) 字段。"
 
 
@@ -956,8 +927,7 @@ def m_profile():
         _require_login()
     L, R = st.columns([2, 1], gap="medium")
     with L:
-        # 发布
-        st.markdown(f"<div class='section-head'>{t['uPost']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='section-head'>{t['u_post']}</div>", unsafe_allow_html=True)
         my_posts = supabase.table("comments").select("*").eq("author_username", st.session_state.user).order("id", desc=True).execute().data
         pcs = st.columns(3)
         if not my_posts:
@@ -975,8 +945,7 @@ def m_profile():
                             except Exception as e:
                                 st.error(str(e))
 
-        # 收藏
-        st.markdown(f"<div class='section-head' style='margin-top:14px'>{t['uHist']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='section-head' style='margin-top:14px'>{t['u_hist']}</div>", unsafe_allow_html=True)
         favs = supabase.table("favorites").select("*").eq("username", st.session_state.user).order("id", desc=True).execute().data
         fcs = st.columns(3)
         if not favs:
@@ -996,7 +965,6 @@ def m_profile():
                                 st.error(str(e))
 
     with R:
-        # Deep Green 側欄 ( image_4.png )
         st.markdown("<div class='profile-side'>", unsafe_allow_html=True)
         pr1, pr2 = st.columns([0.62, 0.38])
         with pr1:
@@ -1005,22 +973,19 @@ def m_profile():
             st.markdown("<div style='text-align:right;padding:4px 0'>", unsafe_allow_html=True)
             traffic_dots("profile_side")
             st.markdown("</div>", unsafe_allow_html=True)
-        # 头像
         st.markdown(_profile_avatar_html(st.session_state.user), unsafe_allow_html=True)
-        # 获取用户 profile数据以设置显示名称
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
         default_name = prof.get("profile_name") or st.session_state.user
         nk = f"pn_{st.session_state.user}"
         if nk not in st.session_state:
             st.session_state[nk] = default_name
-        st.text_input(t["uName"], key=nk, on_change=lambda k=nk: _save_profile_name(k))
-        st.text_input(t["uAcct"], value=st.session_state.user, disabled=True)
-        # 密码
+        st.text_input(t["u_name"], key=nk, on_change=lambda k=nk: _save_profile_name(k))
+        st.text_input(t["u_acct"], value=st.session_state.user, disabled=True)
         pen = _icon_path("pencil")
         pw1, pw2 = st.columns([0.76, 0.24])
         with pw1:
-            st.text_input(t["uPwd"], value="********", disabled=True)
+            st.text_input(t["u_pwd"], value="********", disabled=True)
         with pw2:
             st.markdown("<div style='height:2.4rem'></div>", unsafe_allow_html=True)
             if pen:
@@ -1030,25 +995,21 @@ def m_profile():
             else:
                 if st.button(t["pwd_edit"], key="pwd_edit", use_container_width=True):
                     st.session_state.open_pw = True
-        # 退出
         if st.button(t["out"], type="primary", use_container_width=True, key="logout_profile"):
             st.session_state.user = None
             st.session_state.need_del_cookie = True
             st.session_state.logout_flag = True
             st.session_state.current_page = "Home"
             st.rerun()
-        # 字段兼容警告
         if st.session_state.get("_profile_warn"):
             st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 弹窗
     if st.session_state.get("open_pw"):
         dlg_pw()
 
 
 def m_about():
-    # 静态图片列表：static/team 下 team/time1/time2 png等
     imgs = _team_images()
     if not imgs:
         st.warning("未找到 static/team 下的 team / time1 / time2 图片，请将文件放入项目 static 目录。")
@@ -1059,7 +1020,6 @@ def m_about():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ---------- 登录/注册弹窗 (与代码一致) ----------
 @st.dialog(t["login"])
 def dlg_login():
     u = st.text_input(t["id_in"])
@@ -1075,7 +1035,6 @@ def dlg_login():
                 st.session_state.need_set_cookie = True
                 st.session_state.logout_flag = False
                 st.session_state.open_login = False
-                # 兼容旧逻辑跳转，按设计稿首页不需自动跳转子页
                 st.rerun()
             else:
                 st.error(t["err"])
@@ -1104,95 +1063,151 @@ def dlg_signup():
             st.error(str(e))
 
 
-# ---------- 首页渲染 (核心修改：侧边栏框 + 功能卡片移出主区) ----------
+# ---------- 原汁原味分栏渲染：完美契合视频 UI ----------
 def render_home():
-    # 页头
-    top = st.columns([5, 1, 1, 1, 1])
-    top[0].markdown(
-        f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>",
-        unsafe_allow_html=True,
-    )
-    with top[1]:
-        # 设置
-        st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-        if _icon_path("settings", "gear", "cog"):
-            sg1, sg2 = st.columns([0.35, 0.65])
-            with sg1:
-                _show_icon("settings", "gear", "cog", width=22)
-            with sg2:
-                if st.button(" ", key="home_set", help=t["set"]):
+    # 核心：使用原生的列布局，左侧为导航，右侧为主页面
+    side, main = st.columns([0.28, 0.72], gap="large")
+    
+    with side:
+        # 左侧悬浮导航深绿色容器
+        st.markdown(f"<div style='background:{SIDE_BG};padding:14px;border-radius:14px;min-height:720px'>", unsafe_allow_html=True)
+        st.markdown("### ")
+        
+        # 导航按钮
+        st.markdown('<div class="side-card">', unsafe_allow_html=True)
+        _show_icon("kitchen", "ai_kitchen", "m1", width=36)
+        if st.button(t["m1"], key="nav_m1", use_container_width=True):
+            st.session_state.current_page = "A"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown('<div class="side-card">', unsafe_allow_html=True)
+        _show_icon("community", "hall", "m2", width=36)
+        if st.button(t["m2"], key="nav_m2", use_container_width=True):
+            st.session_state.current_page = "C"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown('<div class="side-card">', unsafe_allow_html=True)
+        _show_icon("data", "health", "chart", "m3", width=36)
+        if st.button(t["m3"], key="nav_m3", use_container_width=True):
+            st.session_state.current_page = "B"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 下载提示与链接
+        st.markdown(f"<div style='color:#fff;margin:12px 0 6px 0;font-size:0.95rem'>{t['dl_hint']}</div>", unsafe_allow_html=True)
+        dl1, dl2 = st.columns([0.82, 0.18], gap="small")
+        with dl1:
+            st.markdown(
+                f"<a class='dl-side-link' href='{html.escape(RESOURCE_DOWNLOAD_URL)}' "
+                "target='_blank' rel='noopener noreferrer'>"
+                f"{html.escape(t['dl_btn'])}</a>",
+                unsafe_allow_html=True,
+            )
+        with dl2:
+            cu = _icon_path("cursor")
+            if cu:
+                st.image(str(cu), width=34)
+
+        # 底部账户信息
+        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+        na1, na2 = st.columns([0.72, 0.28], gap="small")
+        with na1:
+            st.markdown(
+                f"<div style='color:#fff;padding-top:6px'>{t['name_l']} / {t['acct_l']}</div>",
+                unsafe_allow_html=True,
+            )
+        with na2:
+            pu = _icon_path("user")
+            if pu:
+                st.image(str(pu), width=40)
+            else:
+                st.markdown("<div style='color:#fff;font-size:1.6rem;line-height:1'>👤</div>", unsafe_allow_html=True)
+
+        if st.button((st.session_state.user or "Guest"), key="side_user", use_container_width=True):
+            if st.session_state.user:
+                st.session_state.current_page = "D"
+            else:
+                st.session_state.open_login = True
+            st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with main:
+        # 顶部导航
+        top = st.columns([5, 1, 1, 1, 1])
+        top[0].markdown(
+            f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>",
+            unsafe_allow_html=True,
+        )
+        with top[1]:
+            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+            if _icon_path("settings", "gear", "cog"):
+                sg1, sg2 = st.columns([0.35, 0.65])
+                with sg1:
+                    _show_icon("settings", "gear", "cog", width=22)
+                with sg2:
+                    if st.button(" ", key="home_set", help=t["set"]):
+                        st.session_state.current_page = "Settings"
+                        st.rerun()
+            else:
+                if st.button("⚙️", key="home_set", help=t["set"]):
                     st.session_state.current_page = "Settings"
                     st.rerun()
-        else:
-            if st.button("⚙️", key="home_set", help=t["set"]):
-                st.session_state.current_page = "Settings"
+            st.markdown("</div>", unsafe_allow_html=True)
+        with top[2]:
+            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+            if st.button(t["login"], use_container_width=True):
+                st.session_state.open_login = True
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with top[3]:
-        # 登录
-        st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-        if st.button(t["login"], use_container_width=True):
-            st.session_state.open_login = True
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with top[4]:
-        # 语言
-        st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-        if st.button(t["language"], use_container_width=True):
-            st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with top[3]:
+            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+            if st.button(t["signup"], use_container_width=True):
+                st.session_state.open_signup = True
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        with top[4]:
+            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+            if st.button(t["language"], use_container_width=True):
+                st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    # 側欄已在 render_sidebar 中渲染绿框和功能，按要求不再将它们放在主区
+        st.caption("Group3 / Product Owner: TrungHieu Le")
 
-    # 主区： About 我们项目（ image_5.png 底部卡片移出至 About，这里保留About入口卡片）
-    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-    c0, c1, c2 = st.columns([1, 2, 1])
-    with c1:
-        with st.container(border=True):
-            # 装饰三色点
-            w1, w2 = st.columns([0.14, 0.86])
-            with w1:
-                # 使用自定义 CSS 或 emoji 模拟装饰点
-                st.markdown(
-                    "<span class='traffic-dot yellow'></span>"
-                    "<span class='traffic-dot green'></span>",
-                    unsafe_allow_html=True,
-                )
-            with w2:
-                # TEXT 叠层
-                st.markdown(
-                    "<div style='padding-top:2px;color:#333;font-size:0.85rem;font-weight:600'>"
-                    "ABOUT OUR PROJECT · Recipe Nutrition Generator</div>",
-                    unsafe_allow_html=True,
-                )
-            # 背景卡（Midterm... preview 卡）
-            st.markdown(
-                "<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;"
-                "margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;"
-                "letter-spacing:.04em'>Midterm progress preview</div>",
-                unsafe_allow_html=True,
-            )
-            # ABOUT 入口按钮 ( image_5.png 底部「点击这里」移出至下载，这里作为 About 入口)
-            abp = _icon_path("about")
-            # 用设计稿中的白卡样式作为入口
-            st.markdown(
-                f"<div style='background:{c['card']};border-radius:12px;border:1px solid rgba(0,0,0,0.06);padding:14px;display:flex;justify-content:space-between;align-items:center'>"
-                f"<span style='color:{c['text']}'>{html.escape(t['about'])}</span>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            ab_l, ab_r = st.columns([0.8, 0.2])
-            with ab_l:
-                # 砌体卡样：About 入口
-                st.empty()
-            with ab_r:
-                if abp:
-                    st.image(str(abp), width=28)
-            # 卡片整体点击导航
-            if st.button(" 透明 About 入口", key="home_about", type="primary", use_container_width=True):
+        # 团队简介图
+        c0, c1, c2 = st.columns([1, 2, 1])
+        with c1:
+            if st.button(t["about"], use_container_width=True):
                 st.session_state.current_page = "About"
                 st.rerun()
+            st.caption("Scrollable long page uses static/team: team, time1, time2")
+
+            with st.container(border=True):
+                w1, w2 = st.columns([0.14, 0.86])
+                with w1:
+                    traffic_dots("home_device")
+                with w2:
+                    st.markdown(
+                        "<div style='padding-top:2px;color:#333;font-size:0.85rem;font-weight:600'>"
+                        "ABOUT OUR PROJECT · Recipe Nutrition Generator</div>",
+                        unsafe_allow_html=True,
+                    )
+                st.markdown(
+                    "<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;"
+                    "margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;"
+                    "letter-spacing:.04em'>Midterm progress preview</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    "<div style='display:flex;gap:10px;flex-wrap:wrap'>"
+                    "<div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div>"
+                    "<div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
 
     # 弹窗
     if st.session_state.open_login:
@@ -1201,18 +1216,13 @@ def render_home():
         dlg_signup()
 
 
-# ---------- 路由/主应用循环 ----------
-# 按要求：先将 UI 设计改完，再应用颜色修改
-render_sidebar()  # 渲染绿框和功能栏
-
+# ---------- 路由分发 ----------
 if st.session_state.current_page == "Home":
     render_home()
 
 elif st.session_state.current_page == "Settings":
-    # 按要求不使用侧栏，用页头红圆关闭回首页
     ht1, ht2 = st.columns([0.12, 0.88])
     with ht1:
-        # 在设置页头渲染红圆 decor（ image_4.png décor 等效，按 URL 参数回首页）
         st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
         traffic_dots("settings_top")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1234,7 +1244,6 @@ elif st.session_state.current_page == "Settings":
             st.rerun()
 
 elif st.session_state.current_page == "About":
-    # 页头红圆 decor 回首页
     u1, u2 = st.columns([0.12, 0.88])
     with u1:
         st.markdown("<div style='padding-top:4px'>", unsafe_allow_html=True)
@@ -1245,9 +1254,7 @@ elif st.session_state.current_page == "About":
     m_about()
 
 else:
-    # 子页面渲染（按设计稿在页头使用装饰点装饰）
-    # 用 Deep Green 页头装饰点取代原「返回大厅」文字按钮
-    
+    # 渲染全屏的纯粹功能子页
     if st.session_state.current_page == "A":
         m_kitchen()
     elif st.session_state.current_page == "B":
