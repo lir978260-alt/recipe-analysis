@@ -1,8 +1,8 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 升级 About 页面渲染引擎，精准支持 group.png、time1.jpg、time2.jpg 按顺序自动拼合。
-2. 修复了健康数据页面折线图上方出现多余灰色空白框的渲染 Bug。
+1. 重构首页“关于项目”图片模块，解除宽度限制，引入全宽 Banner (横幅) 级视觉效果。
+2. 使用 object-fit: cover 和 360px 固定高度，使右侧图片与左侧导航高度完美齐平。
 3. 彻底移除了所有无用的“红黄绿”窗口按钮，保留四款浅色/护眼主题。
 4. 全局引入 top_back_btn()，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
 5. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
@@ -95,7 +95,6 @@ def _team_images() -> list[Path]:
                 hit = p
                 break
         if hit:
-            # 防止同时加载 group 和 team 造成重复
             if base == "team" and any(path.stem == "group" for path in out):
                 continue
             out.append(hit)
@@ -813,19 +812,26 @@ def render_home():
 
         st.caption(f"<span style='color:{TEXT_MAIN};'>Group3 / Product Owner: TrungHieu Le</span>", unsafe_allow_html=True)
 
-        c0, c1, c2 = st.columns([1, 2, 1])
-        with c1:
-            if st.button(t["about"], use_container_width=True): st.session_state.current_page = "About"; st.rerun()
+        # ---------------- 【核心更新区域：全屏 Banner 渲染】 ----------------
+        if st.button(t["about"], use_container_width=True): 
+            st.session_state.current_page = "About"
+            st.rerun()
 
-            with st.container(border=True):
-                about_img = ROOT / "about.jpg"
-                if not about_img.is_file():
-                    about_img = STATIC / "about.jpg"
-                    
-                if about_img.is_file():
-                    st.image(str(about_img), use_column_width=True)
-                else:
-                    st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Please place about.jpg in the directory</div>", unsafe_allow_html=True)
+        about_img = ROOT / "about.jpg"
+        if not about_img.is_file():
+            about_img = STATIC / "about.jpg"
+            
+        if about_img.is_file():
+            # 将图片转为 Base64 并使用 CSS object-fit 强制锁定高度为 360px，完美对齐左侧导航
+            img_b64 = base64.b64encode(about_img.read_bytes()).decode()
+            st.markdown(f'''
+                <div style="width:100%; height:360px; border-radius:12px; overflow:hidden; margin-top:8px; border: 1px solid rgba(150,150,150,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="About Project Banner">
+                </div>
+            ''', unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:360px;border-radius:12px;margin-top:8px;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:14px;letter-spacing:.04em;border: 1px solid rgba(150,150,150,0.2);'>Please place about.jpg in the directory</div>", unsafe_allow_html=True)
+
 
 # ---------- 10. 路由分发渲染 ----------
 def m_about():
