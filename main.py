@@ -1,10 +1,11 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最终升级版：
-1. 移除独立语言按钮，将【语言切换】与【主题配色】统一收纳至“设置(⚙️)”弹窗。
-2. 强绑定 AI 双语系统：根据所选语言，强制大模型以纯中文或纯英文进行输出。
-3. 新增 5 款精美 UI 动态主题色库，支持一键切换全局颜色响应。
-4. 修复了原生 HTML 组件报错，具备完全对称布局及本地 PDF 直传免跳转下载。
+1. 修复了顶栏“设置”等按钮在窄屏下自动换行变两行的 Bug。
+2. 引入了轻量级 UI 自适应（Media Queries），根据屏幕宽度微调字体大小和元素间距。
+3. 移除独立语言按钮，将【语言切换】与【主题配色】统一收纳至“设置(⚙️)”弹窗。
+4. 强绑定 AI 双语系统，新增 5 款精美 UI 动态主题色库。
+5. 修复了原生 HTML 组件报错，具备完全对称布局及本地 PDF 直传免跳转下载。
 """
 from __future__ import annotations
 
@@ -257,7 +258,7 @@ dish_library = {
 }
 
 
-# ---------- 5. 动态响应全局 CSS ----------
+# ---------- 5. 动态响应全局 CSS 与 UI 自适应微调 ----------
 st.markdown(
     f"""
 <style>
@@ -267,8 +268,16 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 顶栏悬浮按钮 */
-.pill-btn > button {{ background: {BTN_BG} !important; color: {BTN_TEXT} !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
+/* 【核心修复】：顶栏悬浮按钮强制不换行，且最小宽度自适应，解决两行堆叠 Bug */
+.pill-btn > button {{ 
+    background: {BTN_BG} !important; 
+    color: {BTN_TEXT} !important; 
+    border-radius: 999px !important; 
+    border: none !important; 
+    padding: 0.4rem 1rem !important; 
+    white-space: nowrap !important; 
+    min-width: max-content !important;
+}}
 .pill-btn > button:hover {{ filter: brightness(0.9) !important; }}
 
 /* 左侧导航按钮统一样式 */
@@ -285,7 +294,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"] {{
 }}
 div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
 
-/* 个人主页底部白底按钮 */
 .user-btn-wrapper button {{
     background: #ffffff !important; color: #333333 !important; border: 1px solid rgba(0,0,0,0.1) !important;
     border-radius: 8px !important; font-weight: normal !important; padding: 8px !important; width: 100% !important;
@@ -294,13 +302,24 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
 .masonry {{ column-count: 4; column-gap: 10px; }}
-@media (max-width: 1100px) {{ .masonry {{ column-count: 2; }} }}
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
 .rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
 .chart-box {{ background: {COMM_RANK_SIDEBAR}; border-radius: 12px; padding: 8px; min-height: 220px; }}
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
+
+/* 【UI 自适应微调 (Media Queries)】根据屏幕大小平滑缩放字体与间距 */
+@media screen and (max-width: 1200px) {{
+    h2 {{ font-size: 1.6rem !important; }}
+    .side-card button {{ font-size: 0.9rem !important; min-height: 45px !important; margin-bottom: 10px !important; }}
+    .pill-btn > button {{ padding: 0.3rem 0.7rem !important; font-size: 0.9rem !important; }}
+}}
+@media screen and (max-width: 768px) {{
+    h2 {{ font-size: 1.4rem !important; }}
+    .side-card button {{ font-size: 0.85rem !important; }}
+    .pill-btn > button {{ font-size: 0.85rem !important; }}
+}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -320,7 +339,6 @@ except Exception:
 
 
 def ask_ai_stream(sys_p, usr_p, img=None):
-    # 强制大模型双语隔离核心指令
     lang_inst = "简体中文 (Simplified Chinese)" if t["sys_lang"] == "简体中文" else "English"
     sys_p = f"{sys_p}\n\nYou MUST strictly communicate in {lang_inst}."
     usr_p += f"\n\n[CRITICAL SYSTEM INSTRUCTION: You MUST output your ENTIRE response strictly in {lang_inst}. NO OTHER LANGUAGES ARE ALLOWED!]"
@@ -791,16 +809,15 @@ def render_home():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with main:
-        # 顶栏导航极简化：登录前后统一采用齿轮弹窗
         if st.session_state.user:
-            top = st.columns([8, 1])
+            top = st.columns([7, 1.5])
             top[0].markdown(f"<h2 style='margin:0;padding-top:6px;color:{TEXT_MAIN};font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
                 if st.button("⚙️ " + t["set"], key="home_set", use_container_width=True): dlg_settings()
                 st.markdown("</div>", unsafe_allow_html=True)
         else:
-            top = st.columns([6, 1, 1, 1])
+            top = st.columns([5, 1.2, 1.2, 1.2])
             top[0].markdown(f"<h2 style='margin:0;padding-top:6px;color:{TEXT_MAIN};font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
