@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 重构首页“关于项目”图片模块，解除强制高度裁剪，图片等比例放大，不丢失任何细节。
-2. 彻底移除了所有无用的“红黄绿”窗口按钮，保留四款浅色/护眼主题。
-3. 全局引入 top_back_btn()，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
-4. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
+1. 彻底修复了社区页面由于字典键值冲突导致的 KeyError Bug（加入绝对唯一索引防弹机制）。
+2. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的高级瀑布流 (Masonry) 展示。
+3. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
+4. 全局引入 top_back_btn()，所有子功能页面统一提供【⬅️ 返回大厅】按钮。
 """
 from __future__ import annotations
 
@@ -302,6 +302,7 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
 .rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
+.chart-box {{ background: {COMM_RANK_SIDEBAR}; border-radius: 12px; padding: 8px; min-height: 220px; }}
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
 
@@ -509,8 +510,9 @@ def m_community():
         st.markdown(f"<div style='background:{COMM_RANK_SIDEBAR};border-radius:12px;padding:12px 10px 10px 10px;margin-bottom:8px'><div style='font-family:Georgia,serif;font-weight:700;color:#fafafa;margin:0'>{t['c_rank']}</div></div>", unsafe_allow_html=True)
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
         if top_dishes:
-            for d in top_dishes:
-                btn_key = f"hv_{d.get('id', d.get('dish_name', 'default'))}"
+            # 【防弹处理】加入了绝对唯一索引 idx，无论数据怎么脏都不会产生重复 key 导致 KeyError
+            for idx, d in enumerate(top_dishes):
+                btn_key = f"hv_rank_{idx}_{d.get('id', 'unk')}"
                 row_l, row_r = st.columns([0.78, 0.22], gap="small")
                 with row_l: st.markdown(f"<div class='rank-row'><span><b>{d.get('dish_name','')}</b> — {d.get('votes',0)} {t['votes']}</span></div>", unsafe_allow_html=True)
                 with row_r:
@@ -524,31 +526,13 @@ def m_community():
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
+        # 【极简重构】仅保留瀑布流
         parts = [f"<div style='background:{CHAT_MAIN_BG};padding:12px;border-radius:12px;margin-top:4px;'><div class='masonry'>"]
         for r in comments_data:
-            parts.append(f"<div class='card-brick'><div style='font-weight:700'>{r.get('dish_name','')}</div><div style='opacity:.85;font-size:.9rem'>{r.get('user_name','')}</div><div style='margin-top:6px'>{r.get('comment','')}</div></div>")
+            tag_str = f"<span style='color:{DEEP_GREEN};font-size:0.8rem;font-weight:bold;'>{r.get('tag','')}</span><br/>" if r.get('tag') else ""
+            parts.append(f"<div class='card-brick'><div style='font-weight:700'>{r.get('dish_name','')}</div><div style='opacity:.85;font-size:.9rem'>{r.get('user_name','')}</div>{tag_str}<div style='margin-top:6px'>{r.get('comment','')}</div></div>")
         parts.append("</div></div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
-
-        st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['c_t2']}**</div>", unsafe_allow_html=True)
-        for r in comments_data:
-            with st.container(border=True):
-                st.write(f"**{r.get('user_name','')}** | 🏷️ {r.get('tag','')}\n### {r.get('dish_name','')}\n{r.get('comment','')}")
-                lk = r.get("liked_by") if isinstance(r.get("liked_by"), list) else []
-                has_liked = (st.session_state.user in lk) if st.session_state.user else False
-                if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
-                    lk.append(st.session_state.user); supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute(); st.rerun()
-                reps = r.get("replies") if isinstance(r.get("replies"), list) else []
-                if reps:
-                    st.markdown("---")
-                    for rep in reps: st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
-                if st.session_state.user:
-                    with st.expander(t["reply"]):
-                        rep_text = st.text_input(t["reply_ph"], key=f"rt_{r.get('id', 'temp')}")
-                        if st.button(t["send"], key=f"rs_{r.get('id', 'temp')}") and rep_text:
-                            reps.append({"u": st.session_state.user, "t": rep_text})
-                            try: supabase.table("comments").update({"replies": reps}).eq("id", r.get("id")).execute(); st.rerun()
-                            except Exception as e: st.error(str(e))
 
         st.markdown("<div class='footer-bar'>", unsafe_allow_html=True)
         fc1, fc2, fc3, fc4 = st.columns([4, 1, 2, 1])
@@ -820,7 +804,6 @@ def render_home():
             about_img = STATIC / "about.jpg"
             
         if about_img.is_file():
-            # 移除高度锁定与裁剪，让图片等比例自然撑开
             img_b64 = base64.b64encode(about_img.read_bytes()).decode()
             st.markdown(f'''
                 <div style="width:100%; border-radius:12px; overflow:hidden; margin-top:8px; border: 1px solid rgba(150,150,150,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
