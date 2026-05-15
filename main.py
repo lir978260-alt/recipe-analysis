@@ -1,20 +1,34 @@
 """
-AI Health Ecosystem — Streamlit 网页端
-最新防弹优化版：
-1. 补全国际化双语字典，修复个人主页“更换头像”与“修改”密码按钮硬编码中文的问题。
-2. 将右侧社区动态流放入定高内滚容器 (height=650)，实现“发布动态”按钮吸顶停留的完美交互。
-3. 排行榜精确锁定高度展示前 5 个菜品，其余通过右侧原生滑动条浏览。
-4. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的卡片动态。
-5. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
+AI Health Ecosystem — Streamlit 网页端 (极致安全 & 平滑升级版)
+核心特性：
+1. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制，不影响老用户。
+2. [密码安全] 新密码强制使用 PBKDF2_HMAC + 动态盐值进行 10万次哈希加密。
+3. [防 XSS] 所有用户生成的动态内容在渲染 HTML 前强制通过 html.escape() 转义。
+4. [防越权] 删除/修改操作强制绑定当前会话用户，杜绝抓包篡改他人数据。
+5. [图片安检] 社区配图强制重采样清洗，拦截恶意脚本并限制文件大小。
+6. [防篡改] 带有 HMAC 签名的安全 Cookie。
+7. [极致 UI] 全宽图片 Banner、原生左侧滚动排行榜、右侧吸顶发布按钮与纯净瀑布流。
 """
 from __future__ import annotations
 
 import base64
 import html
 import json
+import hashlib
+import hmac
+import secrets
+import io
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
+
+# 核心安全依赖：图片洗稿与压缩防爆
+try:
+    from PIL import Image
+except ImportError:
+    import streamlit as st
+    st.error("🔒 安全引擎需要 Pillow 库，请在终端执行 `pip install Pillow`")
+    st.stop()
 
 import extra_streamlit_components as stx
 import pandas as pd
@@ -22,6 +36,71 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
+
+# ==========================================
+# 0. 核心安全引擎 (Security Core)
+# ==========================================
+COOKIE_SECRET = st.secrets.get("COOKIE_SECRET", "super_secret_fallback_key_123!@#")
+
+def hash_password(password: str, salt: str = None) -> str:
+    """PBKDF2_HMAC 强哈希加密"""
+    if not salt:
+        salt = secrets.token_hex(16)
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"{salt}${pwd_hash.hex()}"
+
+def verify_password_with_upgrade(stored_password: str, provided_password: str) -> tuple[bool, bool]:
+    """
+    智能密码验证引擎 (支持老用户平滑升级)
+    返回元组: (密码是否正确, 是否需要系统自动升级为哈希)
+    """
+    # 如果密码里没有 $ 符号，说明是遗留的明文密码
+    if "$" not in stored_password:
+        if stored_password == provided_password:
+            return True, True  # 密码正确，但需要升级
+        return False, False
+        
+    # 如果是强加密哈希，走标准验证流程
+    try:
+        salt, _ = stored_password.split('$')
+        return stored_password == hash_password(provided_password, salt), False
+    except ValueError:
+        return False, False
+
+def sign_cookie(username: str) -> str:
+    """为 Cookie 颁发防篡改签名"""
+    signature = hmac.new(COOKIE_SECRET.encode(), username.encode(), hashlib.sha256).hexdigest()
+    return f"{username}.{signature}"
+
+def verify_cookie(cookie_value: str) -> str | None:
+    """验证并提取安全的 Cookie"""
+    if not cookie_value or "." not in cookie_value:
+        return None
+    username, signature = cookie_value.split(".", 1)
+    expected_signature = hmac.new(COOKIE_SECRET.encode(), username.encode(), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(signature, expected_signature):
+        return username
+    return None
+
+def process_safe_image(uploaded_file, max_mb=2, max_dim=800) -> tuple[str | None, str | None]:
+    """图片安全过滤与重采样引擎 (防木马伪装)"""
+    if not uploaded_file:
+        return None, None
+    if uploaded_file.size > max_mb * 1024 * 1024:
+        return None, f"文件超过限制 ({max_mb}MB)"
+    try:
+        img = Image.open(uploaded_file)
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        fmt = "PNG" if img.format == "PNG" else "JPEG"
+        if fmt == "JPEG" and img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        buffered = io.BytesIO()
+        img.save(buffered, format=fmt, quality=85)
+        b64_data = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return f"data:image/{fmt.lower()};base64,{b64_data}", None
+    except Exception:
+        return None, "非法或损坏的图像文件"
+
 
 # ---------- 1. 静态资源路径 ----------
 ROOT = Path(__file__).resolve().parent
@@ -55,16 +134,17 @@ def _icon_to_data_uri(p: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
+    safe_uname = html.escape(str(username))
     if avatar_data:
         if avatar_data.startswith("preset:"):
-            seed = avatar_data.split(":", 1)[1]
+            seed = html.escape(avatar_data.split(":", 1)[1])
             av_url = f"https://api.dicebear.com/7.x/shapes/svg?seed={quote(seed, safe='')}&backgroundColor=e6f2e0,c5d4b8,d8e6d1"
         elif avatar_data.startswith("b64:"):
             av_url = avatar_data[4:]
         else:
-            av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(str(username), safe='')}&backgroundColor=6b8f6f,2f4a35"
+            av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(safe_uname, safe='')}&backgroundColor=6b8f6f,2f4a35"
     else:
-        av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(str(username), safe='')}&backgroundColor=6b8f6f,2f4a35"
+        av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(safe_uname, safe='')}&backgroundColor=6b8f6f,2f4a35"
 
     cam = _icon_path("camera")
     overlay = ""
@@ -118,17 +198,21 @@ for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "op
 
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
-if st.session_state.need_set_cookie:
-    cookie_manager.set("saved_user", str(st.session_state.user), expires_at=datetime.now() + timedelta(days=30))
+if st.session_state.need_set_cookie and st.session_state.user:
+    cookie_manager.set("saved_user", sign_cookie(str(st.session_state.user)), expires_at=datetime.now() + timedelta(days=30))
     st.session_state.need_set_cookie = False
 if st.session_state.need_del_cookie:
     cookie_manager.delete("saved_user")
     st.session_state.need_del_cookie = False
 
-saved_user = cookie_manager.get(cookie="saved_user")
-if saved_user and isinstance(saved_user, str) and st.session_state.user is None and not st.session_state.logout_flag:
-    st.session_state.user = saved_user
-    st.rerun()
+raw_cookie = cookie_manager.get(cookie="saved_user")
+if raw_cookie and isinstance(raw_cookie, str) and st.session_state.user is None and not st.session_state.logout_flag:
+    verified_user = verify_cookie(raw_cookie)
+    if verified_user:
+        st.session_state.user = verified_user
+        st.rerun()
+    else:
+        st.session_state.need_del_cookie = True
 
 if st.query_params.get("_home") == "1":
     st.session_state.current_page = "Home"
@@ -417,6 +501,7 @@ def m_kitchen():
 
         if st.session_state.get("l_rec") and st.session_state.user and st.button(t["fav"]):
             try:
+                # 防越权
                 supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
                 st.success(t["suc"])
             except Exception as e: st.error(f"DB Error: {e}")
@@ -448,12 +533,18 @@ def m_health():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
         for r in logs_data:
+            # 防 XSS
+            safe_b = html.escape(str(r.get('breakfast','')))
+            safe_l = html.escape(str(r.get('lunch','')))
+            safe_dn = html.escape(str(r.get('dinner','')))
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
-                st.write(f"{t['b']}:{r.get('breakfast','')} {t['l']}:{r.get('lunch','')} {t['dn']}:{r.get('dinner','')}")
+                st.write(f"{t['b']}:{safe_b} {t['l']}:{safe_l} {t['dn']}:{safe_dn}")
                 ce, cd = st.columns(2)
                 if ce.button(t["edit"], key=f"e_{r.get('id', 'temp')}"): st.session_state.editing_id = r.get("id"); st.rerun()
                 if cd.button(t["del"], key=f"d_{r.get('id', 'temp')}"):
-                    try: supabase.table("diet_logs").delete().eq("id", r.get("id")).execute(); st.rerun()
+                    try: 
+                        # 防越权
+                        supabase.table("diet_logs").delete().eq("id", r.get("id")).eq("username", st.session_state.user).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
         logs = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date").execute().data
@@ -472,11 +563,15 @@ def m_health():
             b, l, dn = st.text_input(t["b"]), st.text_input(t["l"]), st.text_input(t["dn"])
             if st.form_submit_button(t["sub"], type="primary"):
                 cal_str = ask_ai_sync("Nutrition Calculator", f"Estimate total calories. Return ONLY an integer: Breakfast:{b} Lunch:{l} Dinner:{dn}")
-                cal = int("".join(filter(str.isdigit, cal_str)) or 0)
-                payload = {"username": st.session_state.user, "log_date": str(d), "weight": w, "calories": cal, "breakfast": b, "lunch": l, "dinner": dn}
+                try:
+                    cal = int("".join(filter(str.isdigit, cal_str)) or 0)
+                except ValueError:
+                    cal = 0
+                payload = {"username": st.session_state.user, "log_date": str(d), "weight": float(w), "calories": cal, "breakfast": str(b), "lunch": str(l), "dinner": str(dn)}
                 try:
                     if st.session_state.editing_id:
-                        supabase.table("diet_logs").update(payload).eq("id", st.session_state.editing_id).execute()
+                        # 防越权
+                        supabase.table("diet_logs").update(payload).eq("id", st.session_state.editing_id).eq("username", st.session_state.user).execute()
                         st.session_state.editing_id = None
                     else:
                         supabase.table("diet_logs").insert(payload).execute()
@@ -487,7 +582,7 @@ def m_health():
 
 def _submit_vote(dish_name: str):
     try:
-        exist = supabase.table("dish_ranking").select("*").eq("dish_name", dish_name).execute().data
+        exist = supabase.table("dish_ranking").select("*").eq("dish_name", str(dish_name)).execute().data
         if exist:
             record = exist[0]
             voters = record.get("voted_by", [])
@@ -496,17 +591,17 @@ def _submit_vote(dish_name: str):
                 st.warning(t["voted"])
             else:
                 voters.append(st.session_state.user)
-                supabase.table("dish_ranking").update({"votes": record.get("votes", 0) + 1, "voted_by": voters}).eq("id", record.get("id")).execute()
+                supabase.table("dish_ranking").update({"votes": int(record.get("votes", 0)) + 1, "voted_by": voters}).eq("id", record.get("id")).execute()
                 st.session_state["_dish_q"] = ""
                 st.rerun()
         else:
-            supabase.table("dish_ranking").insert({"dish_name": dish_name, "votes": 1, "voted_by": [st.session_state.user]}).execute()
+            supabase.table("dish_ranking").insert({"dish_name": str(dish_name), "votes": 1, "voted_by": [st.session_state.user]}).execute()
             st.session_state["_dish_q"] = ""
             st.rerun()
     except Exception as e:
         st.error(f"DB Error: {e}")
 
-# ---------- 【重构】社区广场 ----------
+# ---------- 社区广场 ----------
 def m_community():
     rank_col, main_col = st.columns([1.2, 2.8], gap="large")
     
@@ -519,7 +614,8 @@ def m_community():
                 for idx, d in enumerate(top_dishes):
                     btn_key = f"hv_rank_{idx}_{d.get('id', 'unk')}"
                     row_l, row_r = st.columns([0.78, 0.22], gap="small")
-                    with row_l: st.markdown(f"<div class='rank-row'><span><b>{d.get('dish_name','')}</b> — {d.get('votes',0)} {t['votes']}</span></div>", unsafe_allow_html=True)
+                    safe_dish_name = html.escape(str(d.get('dish_name','')))
+                    with row_l: st.markdown(f"<div class='rank-row'><span><b>{safe_dish_name}</b> — {int(d.get('votes',0))} {t['votes']}</span></div>", unsafe_allow_html=True)
                     with row_r:
                         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                         hp = _icon_path("heart")
@@ -542,7 +638,7 @@ def m_community():
             dish_q = st.session_state.get("_dish_q", None)
             if dish_q:
                 lib = dish_library[st.session_state.lang]
-                dish_clean = dish_q.strip()
+                dish_clean = html.escape(dish_q.strip())
                 matches = [d for d in lib if dish_clean.lower() in d.lower()]
                 if matches:
                     st.caption(t["guess"])
@@ -563,7 +659,6 @@ def m_community():
     with main_col:
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         
-        # ---------------- 吸顶：发布动态大按钮 ----------------
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         if st.session_state.user:
             if st.button("➕ " + t["pub"], type="primary", use_container_width=True, key="pure_pub_btn_top"):
@@ -572,21 +667,26 @@ def m_community():
             st.button("🔒 " + t["log_req"], disabled=True, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # ---------------- 内滚：原生竖向动态流 ----------------
-        # 引入固定高度容器，实现下方瀑布流独立滚动，不影响上方“发布动态”吸顶
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
         
         with st.container(height=650):
             for r in comments_data:
                 with st.container(border=True):
-                    st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center;'><div><span style='font-weight:bold; font-size:1.1rem; color:{TEXT_MAIN}'>👤 {r.get('user_name','')}</span></div><div style='background:{SAGE_BG}; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; color:{DEEP_GREEN}'>{r.get('tag','')}</div></div>", unsafe_allow_html=True)
+                    # 防 XSS
+                    safe_u = html.escape(str(r.get('user_name','')))
+                    safe_tag = html.escape(str(r.get('tag','')))
+                    safe_dish = html.escape(str(r.get('dish_name','')))
+                    safe_comm = html.escape(str(r.get('comment','')))
                     
-                    st.markdown(f"<div style='font-size:1.3rem; font-weight:bold; margin-top:12px; margin-bottom:6px; color:{TEXT_MAIN}'>🍽️ {r.get('dish_name','')}</div>", unsafe_allow_html=True)
-                    if r.get('comment'):
-                        st.markdown(f"<div style='color:{TEXT_MAIN}; opacity:0.95; margin-bottom:12px; line-height:1.6;'>{r.get('comment','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center;'><div><span style='font-weight:bold; font-size:1.1rem; color:{TEXT_MAIN}'>👤 {safe_u}</span></div><div style='background:{SAGE_BG}; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; color:{DEEP_GREEN}'>{safe_tag}</div></div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<div style='font-size:1.3rem; font-weight:bold; margin-top:12px; margin-bottom:6px; color:{TEXT_MAIN}'>🍽️ {safe_dish}</div>", unsafe_allow_html=True)
+                    if safe_comm:
+                        safe_comm_br = safe_comm.replace('\n', '<br>')
+                        st.markdown(f"<div style='color:{TEXT_MAIN}; opacity:0.95; margin-bottom:12px; line-height:1.6;'>{safe_comm_br}</div>", unsafe_allow_html=True)
                     
                     img_data = r.get('image_data')
-                    if img_data:
+                    if img_data and img_data.startswith("data:image/"): 
                         st.markdown(f"<div style='margin-bottom:12px;'><img src='{img_data}' style='width:100%; max-width:400px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);'/></div>", unsafe_allow_html=True)
                     
                     st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid rgba(150,150,150,0.2)'/>", unsafe_allow_html=True)
@@ -594,7 +694,7 @@ def m_community():
                     lk = r.get("liked_by") if isinstance(r.get("liked_by"), list) else []
                     has_liked = (st.session_state.user in lk) if st.session_state.user else False
                     
-                    if st.button(f"👍 {t['like']} ({r.get('likes', 0)})", key=f"like_btn_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
+                    if st.button(f"👍 {t['like']} ({int(r.get('likes', 0))})", key=f"like_btn_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
                         lk.append(st.session_state.user)
                         supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute()
                         st.rerun()
@@ -607,27 +707,27 @@ def dlg_publish():
     tag = st.selectbox(t["tag"], tag_opts)
     dish = st.text_input(t["title_in"])
     cont = st.text_area(t["desc_in"])
-    up_img = st.file_uploader("📷 上传美食照片 (可选)", type=["jpg", "png", "jpeg"], key="pubimg")
+    up_img = st.file_uploader("📷 上传美食照片 (< 2MB)", type=["jpg", "png", "jpeg"], key="pubimg")
     
     c1, c2 = st.columns(2)
     if c1.button(t["close"]): st.rerun()
     if c2.button(t["publish"], type="primary") and dish:
-        img_b64_str = ""
-        if up_img:
-            b64_data = base64.b64encode(up_img.read()).decode("utf-8")
-            img_b64_str = f"data:{up_img.type};base64,{b64_data}"
+        img_b64_str, err = process_safe_image(up_img)
+        if err:
+            st.error(err)
+            return
 
         try:
             supabase.table("comments").insert({
-                "user_name": st.session_state.user, 
-                "author_username": st.session_state.user, 
-                "dish_name": dish, 
-                "comment": cont, 
+                "user_name": str(st.session_state.user), 
+                "author_username": str(st.session_state.user), 
+                "dish_name": str(dish), 
+                "comment": str(cont), 
                 "likes": 0, 
                 "liked_by": [], 
-                "tag": tag, 
+                "tag": str(tag), 
                 "replies": [],
-                "image_data": img_b64_str
+                "image_data": img_b64_str or "" 
             }).execute()
             st.rerun()
         except Exception as e: 
@@ -639,8 +739,13 @@ def dlg_pw():
     a1, a2 = st.columns(2)
     if a1.button(t["close"]): st.rerun()
     if a2.button(t["submit"], type="primary") and npw:
-        try: supabase.table("app_users").update({"password": npw}).eq("username", st.session_state.user).execute(); st.success(t["suc"]); st.rerun()
-        except Exception as e: st.error(str(e))
+        try: 
+            hashed_pw = hash_password(npw)
+            supabase.table("app_users").update({"password": hashed_pw}).eq("username", st.session_state.user).execute()
+            st.success(t["suc"])
+            st.rerun()
+        except Exception as e: 
+            st.error(str(e))
 
 @st.dialog("⚙️ 网站设置 / App Settings")
 def dlg_settings():
@@ -658,22 +763,45 @@ def dlg_login():
     a, b = st.columns(2)
     if a.button(t["close"]): st.rerun()
     if b.button(t["confirm"], type="primary"):
-        if supabase.table("app_users").select("*").eq("username", u).eq("password", p).execute().data:
-            st.session_state.user, st.session_state.need_set_cookie, st.session_state.logout_flag = u, True, False; st.rerun()
-        else: st.error(t["err"])
+        res = supabase.table("app_users").select("*").eq("username", str(u)).execute().data
+        if res:
+            stored_hash = res[0].get("password", "")
+            
+            # 【无感平滑升级逻辑】
+            is_valid, needs_upgrade = verify_password_with_upgrade(stored_hash, str(p))
+            
+            if is_valid:
+                # 如果发现老用户使用的是明文密码，在后台自动帮他哈希覆盖
+                if needs_upgrade:
+                    new_secure_hash = hash_password(str(p))
+                    supabase.table("app_users").update({"password": new_secure_hash}).eq("username", str(u)).execute()
+                    
+                st.session_state.user = str(u)
+                st.session_state.need_set_cookie = True
+                st.session_state.logout_flag = False
+                st.rerun()
+            else:
+                st.error(t["err"])
+        else: 
+            st.error(t["err"])
 
 @st.dialog("✨ 注册新号 / User Signup")
 def dlg_signup():
     nu, np = st.text_input(t["new_id"]), st.text_input(t["new_pwd"], type="password")
     a, b = st.columns(2)
     if a.button(t["close"]): st.rerun()
-    if b.button(t["confirm"], type="primary"):
-        if supabase.table("app_users").select("*").eq("username", nu).execute().data: st.error(t["err"])
-        else: supabase.table("app_users").insert({"username": nu, "password": np}).execute(); st.success(t["suc"]); st.rerun()
+    if b.button(t["confirm"], type="primary") and nu and np:
+        if supabase.table("app_users").select("*").eq("username", str(nu)).execute().data: 
+            st.error("Username exists")
+        else: 
+            hashed_pw = hash_password(str(np))
+            supabase.table("app_users").insert({"username": str(nu), "password": hashed_pw}).execute()
+            st.success(t["suc"])
+            st.rerun()
 
 def _save_avatar(data_str: str):
     try:
-        supabase.table("app_users").update({"avatar_data": data_str}).eq("username", st.session_state.user).execute()
+        supabase.table("app_users").update({"avatar_data": str(data_str)}).eq("username", st.session_state.user).execute()
         st.rerun()
     except Exception as e: st.error(f"保存失败: {e}")
 
@@ -693,14 +821,18 @@ def dlg_avatar():
         if up_img:
             st.image(up_img, width=150)
             if st.button("保存上传头像", type="primary"):
-                b64_str = base64.b64encode(up_img.read()).decode("utf-8")
-                _save_avatar(f"b64:data:{up_img.type};base64,{b64_str}")
+                img_b64_str, err = process_safe_image(up_img, max_dim=400)
+                if err:
+                    st.error(err)
+                else:
+                    _save_avatar(f"b64:{img_b64_str.split(',')[1]}") # 适配历史格式
 
 def _save_profile_name(key: str):
     if not st.session_state.user: return
     nv = (st.session_state.get(key) or "").strip()
     if not nv: return
-    try: supabase.table("app_users").update({"profile_name": nv}).eq("username", st.session_state.user).execute()
+    try: 
+        supabase.table("app_users").update({"profile_name": str(nv)}).eq("username", st.session_state.user).execute()
     except Exception: st.session_state["_profile_warn"] = "需在 app_users 添加 profile_name 字段。"
 
 
@@ -716,9 +848,13 @@ def m_profile():
             for i, p in enumerate(my_posts[:9]):
                 with pcs[i % 3]:
                     with st.container(border=True):
-                        st.markdown(f"**{p.get('dish_name','')}**")
-                        st.caption((p.get("comment") or "")[:120])
-                        if st.button(t["del_post"], key=f"dp_{p.get('id', 'temp')}"): supabase.table("comments").delete().eq("id", p.get("id")).execute(); st.rerun()
+                        safe_dish = html.escape(str(p.get('dish_name','')))
+                        safe_comm = html.escape(str(p.get('comment') or ""))[:120]
+                        st.markdown(f"**{safe_dish}**")
+                        st.caption(safe_comm)
+                        if st.button(t["del_post"], key=f"dp_{p.get('id', 'temp')}"): 
+                            supabase.table("comments").delete().eq("id", p.get("id")).eq("author_username", st.session_state.user).execute()
+                            st.rerun()
 
         st.markdown(f"<div class='section-head' style='margin-top:14px'>{t['u_hist']}</div>", unsafe_allow_html=True)
         favs = supabase.table("favorites").select("*").eq("username", st.session_state.user).order("id", desc=True).execute().data
@@ -730,7 +866,9 @@ def m_profile():
                     with st.container(border=True):
                         if f.get("recipe_content"):
                             with st.expander(t["fav"]): st.markdown(f.get("recipe_content"))
-                        if st.button(t["unfav"], key=f"uf_{f.get('id', 'temp')}"): supabase.table("favorites").delete().eq("id", f.get("id")).execute(); st.rerun()
+                        if st.button(t["unfav"], key=f"uf_{f.get('id', 'temp')}"): 
+                            supabase.table("favorites").delete().eq("id", f.get("id")).eq("username", st.session_state.user).execute()
+                            st.rerun()
 
     with R:
         st.markdown("<div class='profile-side'>", unsafe_allow_html=True)
@@ -738,7 +876,6 @@ def m_profile():
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
         st.markdown(_profile_avatar_html(st.session_state.user, prof.get("avatar_data")), unsafe_allow_html=True)
-        # 修复硬编码：加入双语字典调用
         if st.button(t.get("change_avatar", "📸 更换头像"), use_container_width=True): dlg_avatar()
 
         default_name = prof.get("profile_name") or st.session_state.user
@@ -751,7 +888,6 @@ def m_profile():
         with pw1: st.text_input(t["u_pwd"], value="********", disabled=True)
         with pw2:
             st.markdown("<div style='height:2.4rem'></div>", unsafe_allow_html=True)
-            # 修复硬编码：加入双语字典调用
             if st.button(t.get("edit_btn", "修改") if not pen else " ", key="pwd_edit", type="primary", use_container_width=True): dlg_pw()
         if st.button(t["out"], type="primary", use_container_width=True, key="logout_profile"):
             st.session_state.user, st.session_state.need_del_cookie, st.session_state.logout_flag, st.session_state.current_page = None, True, True, "Home"; st.rerun()
@@ -802,7 +938,7 @@ def render_home():
             st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
-        display_name = str(st.session_state.user) if st.session_state.user else str(t["guest"])
+        display_name = html.escape(str(st.session_state.user)) if st.session_state.user else str(t["guest"])
         if st.button(display_name, key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
             else: dlg_login()
