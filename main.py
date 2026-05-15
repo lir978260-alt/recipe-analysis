@@ -1,10 +1,11 @@
 """
 AI Health Ecosystem — Streamlit 网页端 (极致安全 & 丝滑流畅版)
 核心优化：
-1. [极致提速] 移除了 Cookie 鉴权时的冗余 st.rerun()，彻底解决双重加载导致的严重卡顿。
-2. [防爆保护] 为社区动态流增加 .limit(30) 限制，防止大量图片拉取导致前端 DOM 渲染崩溃。
-3. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制。
-4. [核心安全] 防 XSS、防越权、防木马（PIL 重采样）、HMAC 签名安全 Cookie 全面保留。
+1. [修复] 重构 AI 厨房模块逻辑：修复未登录时收藏按钮消失的问题，以及点击收藏后生成内容闪退的问题。
+2. [极致提速] 移除了 Cookie 鉴权时的冗余 st.rerun()，彻底解决双重加载导致的严重卡顿。
+3. [防爆保护] 为社区动态流增加 .limit(30) 限制，防止大量图片拉取导致前端 DOM 渲染崩溃。
+4. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制。
+5. [核心安全] 防 XSS、防越权、防木马（PIL 重采样）、HMAC 签名安全 Cookie 全面保留。
 """
 from __future__ import annotations
 
@@ -201,10 +202,8 @@ raw_cookie = cookie_manager.get(cookie="saved_user")
 if raw_cookie and isinstance(raw_cookie, str) and st.session_state.user is None and not st.session_state.logout_flag:
     verified_user = verify_cookie(raw_cookie)
     if verified_user:
-        # [提速修复点] 直接赋予状态即可，去掉 st.rerun() 杜绝无限渲染卡顿
         st.session_state.user = verified_user
     else:
-        # 非法或旧版 Cookie，强制清除并要求重新登录
         st.session_state.need_del_cookie = True
 
 if st.query_params.get("_home") == "1":
@@ -491,13 +490,22 @@ def m_kitchen():
                 with st.spinner(t["think"]):
                     res_stream = ask_ai_stream("You are a Master Chef.", f"Identify ingredients and generate a professional recipe. Preferences: {pref}", up.getvalue())
                     st.session_state["l_rec"] = st.write_stream(res_stream)
+        elif st.session_state.get("l_rec"):
+            # 防止重新渲染时生成的食谱消失
+            st.markdown(st.session_state["l_rec"])
 
-        if st.session_state.get("l_rec") and st.session_state.user and st.button(t["fav"]):
-            try:
-                # 防越权
-                supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
-                st.success(t["suc"])
-            except Exception as e: st.error(f"DB Error: {e}")
+        # 无论是否登录，只要有食谱就显示收藏按钮
+        if st.session_state.get("l_rec"):
+            if st.button(t["fav"], use_container_width=True, type="secondary"):
+                if not st.session_state.user:
+                    st.warning(t["log_req"]) # 未登录时弹出警告
+                else:
+                    try:
+                        # 防越权
+                        supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
+                        st.success(t["suc"])
+                    except Exception as e: 
+                        st.error(f"DB Error: {e}")
                 
     with R:
         st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; margin-bottom: 12px;'>{t['eqa']}</div>", unsafe_allow_html=True)
@@ -526,7 +534,6 @@ def m_health():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).limit(50).execute().data
         for r in logs_data:
-            # 防 XSS
             safe_b = html.escape(str(r.get('breakfast','')))
             safe_l = html.escape(str(r.get('lunch','')))
             safe_dn = html.escape(str(r.get('dinner','')))
@@ -536,7 +543,6 @@ def m_health():
                 if ce.button(t["edit"], key=f"e_{r.get('id', 'temp')}"): st.session_state.editing_id = r.get("id"); st.rerun()
                 if cd.button(t["del"], key=f"d_{r.get('id', 'temp')}"):
                     try: 
-                        # 防越权
                         supabase.table("diet_logs").delete().eq("id", r.get("id")).eq("username", st.session_state.user).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
@@ -563,7 +569,6 @@ def m_health():
                 payload = {"username": st.session_state.user, "log_date": str(d), "weight": float(w), "calories": cal, "breakfast": str(b), "lunch": str(l), "dinner": str(dn)}
                 try:
                     if st.session_state.editing_id:
-                        # 防越权
                         supabase.table("diet_logs").update(payload).eq("id", st.session_state.editing_id).eq("username", st.session_state.user).execute()
                         st.session_state.editing_id = None
                     else:
@@ -660,13 +665,11 @@ def m_community():
             st.button("🔒 " + t["log_req"], disabled=True, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # 【提速 & 防爆修复】 增加 .limit(30) 防止数据库爆炸导致前端严重卡顿
         comments_data = supabase.table("comments").select("*").order("id", desc=True).limit(30).execute().data
         
         with st.container(height=650):
             for r in comments_data:
                 with st.container(border=True):
-                    # 防 XSS
                     safe_u = html.escape(str(r.get('user_name','')))
                     safe_tag = html.escape(str(r.get('tag','')))
                     safe_dish = html.escape(str(r.get('dish_name','')))
