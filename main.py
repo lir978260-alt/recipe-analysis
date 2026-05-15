@@ -1,11 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-最终完美版：
-1. 彻底移除左侧导航的深绿色背景框，融入全局浅绿背景。
-2. 功能栏上移，与右侧图片区域高度对齐。
-3. 侧边栏按钮和下载按钮底色统一为 #808080，文字对比度适配。
-4. 修复 components.html 报错，支持本地 PDF 原生下载。
-5. 包含 100 款动态菜品库。
+1. 移除左侧导航深绿背景，融入全局浅绿背景，对齐高度。
+2. 侧边栏菜单和下载按钮底色统一为 #808080 灰色。
+3. 【新增】重构底部个人用户 UI (名称/账号 + 白底按钮)。
+4. 【新增】根据登录状态动态隐藏/显示顶栏的“登录”与“注册”按钮。
+5. 包含 100 款动态菜品库及本地 PDF 原生下载引擎。
 """
 from __future__ import annotations
 
@@ -62,13 +61,8 @@ def _show_icon(*names: str, width: int = 32) -> bool:
 def _icon_to_data_uri(p: Path) -> str:
     raw = p.read_bytes()
     mime = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-        ".ico": "image/x-icon",
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon",
     }.get(p.suffix.lower(), "application/octet-stream")
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
@@ -117,18 +111,13 @@ st.set_page_config(
 )
 
 for k in ("user", "editing_id"):
-    if k not in st.session_state:
-        st.session_state[k] = None
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Home"
-if "lang" not in st.session_state:
-    st.session_state.lang = "🇨🇳 简体中文"
-if "theme" not in st.session_state:
-    st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
+    if k not in st.session_state: st.session_state[k] = None
+if "current_page" not in st.session_state: st.session_state.current_page = "Home"
+if "lang" not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
+if "theme" not in st.session_state: st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
 
 for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "open_signup", "open_publish", "open_pw"):
-    if k not in st.session_state:
-        st.session_state[k] = False
+    if k not in st.session_state: st.session_state[k] = False
 
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
@@ -173,7 +162,7 @@ i18n = {
         "reply_ph": "写下回复...", "send": "发送", "rec_dish": "🍲 推荐神仙菜品", "rec_ph": "输入菜名并回车进行搜索...",
         "voted": "⚠️ 你已经给这道菜投过票啦！", "votes": "票", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):",
         "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
-        "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish",
+        "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
@@ -197,7 +186,7 @@ i18n = {
         "reply_ph": "Write a reply...", "send": "Send", "rec_dish": "🍲 Recommend a Dish", "rec_ph": "Type dish name and press Enter...",
         "voted": "⚠️ You already voted for this dish!", "votes": "votes", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):",
         "no_match": "🔍 Not in library. Click below to recommend:", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
-        "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish",
+        "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)"
     },
 }
 t = i18n[st.session_state.lang]
@@ -249,44 +238,32 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 右上角按钮样式 */
+/* 右上角导航按钮样式：统一为灰色 */
 .pill-btn > button {{ background: #808080 !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
 
-/* 【核心修改】将侧边栏按钮和下载按钮的底色统一改为灰色 #808080，文字为白色，边缘加一点深色边框增强立体感 */
+/* 侧边栏按钮样式：灰色底，白字 */
 .side-card button {{ 
-    background: #808080 !important; 
-    color: #ffffff !important; 
-    border-radius: 20px !important; 
-    min-height: 50px !important; 
-    white-space: pre-wrap !important; 
-    text-align: center !important; 
-    border: 2px solid #ffffff !important; 
-    font-weight: bold !important; 
-    margin-bottom: 15px !important; 
+    background: #808080 !important; color: #ffffff !important; border-radius: 20px !important; 
+    min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
+    border: 2px solid #ffffff !important; font-weight: bold !important; margin-bottom: 15px !important; 
 }}
 .side-card button:hover {{ background: #666666 !important; }}
 
+/* 侧边栏下载按钮样式：灰色底，白字 */
 div[data-testid="stDownloadButton"] > button[kind="primary"] {{
-    display: block; width: 100%; 
-    background: #808080 !important; 
-    color: #ffffff !important; 
+    display: block; width: 100%; background: #808080 !important; color: #ffffff !important; 
     text-align: center; border-radius: 8px !important; padding: 8px 14px !important; border: none !important; font-weight: 600 !important;
 }}
 div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
     background: #666666 !important; color: #ffffff !important; border: none !important;
 }}
 
-/* 账户/名称 按钮同样应用灰色 */
-div[data-testid="stVerticalBlock"] > div[data-testid="stButton"] > button {{
-    background: #808080 !important; 
-    color: #ffffff !important; 
-    border-radius: 8px !important; 
-    border: none !important;
-    font-weight: bold !important;
+/* 个人中心白色背景按钮 */
+.user-btn-wrapper button {{
+    background: #ffffff !important; color: #333333 !important; border: 1px solid rgba(0,0,0,0.1) !important;
+    border-radius: 8px !important; font-weight: normal !important; padding: 8px !important; width: 100% !important;
 }}
-div[data-testid="stVerticalBlock"] > div[data-testid="stButton"] > button:hover {{
-    background: #666666 !important;
-}}
+.user-btn-wrapper button:hover {{ background: #f9f9f9 !important; }}
 
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
@@ -682,9 +659,7 @@ def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
     with side:
-        # 【核心修改 1】：完全移除 background 和 min-height，让功能栏自然上移并融入背景
         st.markdown(f"<div style='padding:14px'>", unsafe_allow_html=True)
-        # 移除掉没用的空占位 st.markdown("### ")
         
         for page, label in [("A", t["m1"]), ("C", t["m2"]), ("B", t["m3"])]:
             st.markdown('<div class="side-card">', unsafe_allow_html=True)
@@ -693,7 +668,6 @@ def render_home():
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # 文字改为深色 #1a1a1a 以在浅色背景上保持清晰
         st.markdown(f"<div style='color:#1a1a1a;margin:12px 0 6px 0;font-size:0.95rem;font-weight:600'>{t['dl_hint']}</div>", unsafe_allow_html=True)
         
         pdf_path = None
@@ -714,37 +688,60 @@ def render_home():
         else:
             st.button(f"{t['dl_btn']} (未找到文件)", disabled=True, use_container_width=True)
 
+        # 【核心修改】重构个人用户区域，名称/账号使用深色字体，右侧加上简约深紫色用户小人图标
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        na1, na2 = st.columns([0.72, 0.28], gap="small")
-        # 字体颜色同步改为深色 #1a1a1a
-        with na1: st.markdown(f"<div style='color:#1a1a1a;padding-top:6px;font-weight:bold;'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
-        with na2: st.markdown("<div style='color:#1a1a1a;font-size:1.6rem;line-height:1'>👤</div>", unsafe_allow_html=True)
+        na1, na2 = st.columns([0.7, 0.3], gap="small")
+        with na1: 
+            st.markdown(f"<div style='color:#1a1a1a;padding-top:10px;font-weight:bold;font-size:1.05rem;'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
+        with na2: 
+            user_svg = '''<svg viewBox="0 0 24 24" fill="none" stroke="#4B3F72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>'''
+            st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
-        if st.button((st.session_state.user or "Guest"), key="side_user", use_container_width=True):
+        # 使用专用的 user-btn-wrapper 显示白底按钮
+        st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
+        display_name = st.session_state.user if st.session_state.user else t["guest"]
+        if st.button(display_name, key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
             else: st.session_state.open_login = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
         st.markdown("</div>", unsafe_allow_html=True)
 
     with main:
-        top = st.columns([5, 1, 1, 1, 1])
-        top[0].markdown(f"<h2 style='margin:0;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
-        with top[1]:
-            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-            if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        with top[2]:
-            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-            if st.button(t["login"], use_container_width=True): st.session_state.open_login = True; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        with top[3]:
-            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-            if st.button(t["signup"], use_container_width=True): st.session_state.open_signup = True; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        with top[4]:
-            st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-            if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        # 【核心修改】动态隐藏/显示“登录”与“注册”按钮
+        if st.session_state.user:
+            # 登录状态下：只显示设置和语言按钮
+            top = st.columns([7, 1, 1])
+            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
+            with top[1]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+            with top[2]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            # 未登录状态：显示登录、注册、设置、语言全部按钮
+            top = st.columns([5, 1, 1, 1, 1])
+            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
+            with top[1]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+            with top[2]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button(t["login"], use_container_width=True): st.session_state.open_login = True; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+            with top[3]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button(t["signup"], use_container_width=True): st.session_state.open_signup = True; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+            with top[4]:
+                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
+                if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
         st.caption("Group3 / Product Owner: TrungHieu Le")
 
