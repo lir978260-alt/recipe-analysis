@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-最终完善版：
-1. 彻底修复 Streamlit @st.dialog 原生状态泄露导致的“幽灵弹窗”Bug。
-2. 引入高度隐私保护的头像模块：支持系统预设及本地 Base64 数据库直存加密，杜绝公网 URL 暴露。
-3. 移除左侧导航深绿背景，按钮灰底白字，对齐布局。
-4. 包含本地 PDF 免跳转原生下载与 100 款动态菜品库。
+1. 移除左侧导航深绿背景，融入全局浅绿背景。
+2. 侧栏按钮为 #808080 灰色。底部用户 UI 白底清爽卡片，动态隐藏顶栏登录。
+3. 【优化】AI智能厨房左右模块绝对像素级对齐（标题、描述、文本框宽高100%一致）。
+4. 【优化】极简去AI味头像系统（首字母缩写 + 抽象几何预设）。
+5. 修复了原生 HTML 组件的 TypeError，包含 PDF 原生下载引擎。
 """
 from __future__ import annotations
 
@@ -44,19 +44,9 @@ def _icon_path(*names: str) -> Path | None:
                 return p.resolve()
     return None
 
-
 def _page_icon_arg() -> str:
     hit = _icon_path("favicon") or _icon_path("icon") or _icon_path("logo") or _icon_path("app")
     return str(hit) if hit else "☁️"
-
-
-def _show_icon(*names: str, width: int = 32) -> bool:
-    p = _icon_path(*names)
-    if p:
-        st.image(str(p), width=width)
-        return True
-    return False
-
 
 def _icon_to_data_uri(p: Path) -> str:
     raw = p.read_bytes()
@@ -66,19 +56,21 @@ def _icon_to_data_uri(p: Path) -> str:
     }.get(p.suffix.lower(), "application/octet-stream")
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
-
+# 【优化】极简去AI味头像渲染
 def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
-    """动态头像渲染逻辑：优先读取 Base64 数据库流，降级读取预设，最后回退随机生成"""
+    """默认首字母缩写，预设几何抽象，支持Base64直传还原"""
     if avatar_data:
         if avatar_data.startswith("preset:"):
             seed = avatar_data.split(":", 1)[1]
-            av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(seed, safe='')}"
+            # 几何抽象形状，降低AI感
+            av_url = f"https://api.dicebear.com/7.x/shapes/svg?seed={quote(seed, safe='')}&backgroundColor=e6f2e0,c5d4b8,d8e6d1"
         elif avatar_data.startswith("b64:"):
             av_url = avatar_data[4:]
         else:
-            av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
+            # 首字母极简头像
+            av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(username, safe='')}&backgroundColor=6b8f6f,2f4a35"
     else:
-        av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
+        av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(username, safe='')}&backgroundColor=6b8f6f,2f4a35"
 
     cam = _icon_path("camera")
     overlay = ""
@@ -98,7 +90,6 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
         f"{overlay}</div>"
     )
 
-
 def _team_images() -> list[Path]:
     out: list[Path] = []
     for base in ("team", "time1", "time2"):
@@ -113,7 +104,7 @@ def _team_images() -> list[Path]:
     return out
 
 
-# ---------- 2. 页面状态管理与核心控制 ----------
+# ---------- 2. 页面状态管理 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
     page_icon=_page_icon_arg(),
@@ -127,8 +118,7 @@ if "current_page" not in st.session_state: st.session_state.current_page = "Home
 if "lang" not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 if "theme" not in st.session_state: st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
 
-# 已清理手动状态变量，仅保留 Cookie 控制
-for k in ("need_set_cookie", "need_del_cookie", "logout_flag"):
+for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "open_signup", "open_publish", "open_pw"):
     if k not in st.session_state: st.session_state[k] = False
 
 cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -150,7 +140,6 @@ if st.query_params.get("_home") == "1":
     st.query_params.clear()
     st.rerun()
 
-
 # ---------- 3. 双语字典引擎 (i18n) ----------
 i18n = {
     "🇨🇳 简体中文": {
@@ -158,7 +147,7 @@ i18n = {
         "language": "语言", "set": "设置", "back": "返回大厅", "m1": "AI 智能厨房\n可视化食谱生成 + 专家问答",
         "m2": "美食社区\n排行榜 + 交流大厅", "m3": "数据管理\n数据记录 + 热量计算", "c_t": "🏘️ 美食广场社区",
         "dl_hint": "如果你需要获取更多个性化的食谱……", "dl_btn": "点击这里下载 PDF", "name_l": "名称", "acct_l": "账号",
-        "k_t": "☁️ AI 智能后厨", "k_t1": "📸 看图出菜谱", "k_t2": "💬 营养师问答", "vdg": "可视化食谱生成",
+        "k_t": "☁️ AI 智能后厨", "k_t1": "📸 看图出菜谱", "k_t2": "💬 营养师问答", "vdg": "视觉食谱生成",
         "vdg_help": "你可以直接上传食材照片，在输入框中填写口味偏好与烹饪限制。AI 会结合食材清单与要求生成菜品。你也可以收藏喜欢的菜品。",
         "eqa": "专家问答", "eqa_help": "你可以用文字或「文字+图片」提出健康相关问题，AI 将以营养师角色作答。",
         "up": "上传食材照片", "req": "附加要求（可选）", "gen": "生成菜谱", "fav": "⭐️ 收藏此篇", "ask": "具体问题描述",
@@ -251,10 +240,8 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 顶栏悬浮按钮 */
 .pill-btn > button {{ background: #808080 !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
 
-/* 左侧导航按钮统一样式 */
 .side-card button {{ 
     background: #808080 !important; color: #ffffff !important; border-radius: 20px !important; 
     min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
@@ -270,7 +257,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
     background: #666666 !important; color: #ffffff !important; border: none !important;
 }}
 
-/* 个人主页底部白底按钮 */
 .user-btn-wrapper button {{
     background: #ffffff !important; color: #333333 !important; border: 1px solid rgba(0,0,0,0.1) !important;
     border-radius: 8px !important; font-weight: normal !important; padding: 8px !important; width: 100% !important;
@@ -343,33 +329,31 @@ def _require_login():
     st.warning("请先登录 / Please login first")
     st.stop()
 
-def traffic_dots(uid: str = "default") -> None:
-    html_code = """
-<div style="display:flex;align-items:center;gap:7px;height:22px;padding:0 2px;">
-<button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#d1d1d1;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;"
-  onclick="(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"></button>
-<span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
-<span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
-</div>
-"""
-    components.html(html_code, height=22, scrolling=False)
-
 
 # ==========================================
 # 7. 各功能页面区
 # ==========================================
 def m_kitchen():
+    """AI厨房：绝对像素级对称，不使用列嵌套导致偏移，直接渲染等高组件"""
     L, R = st.columns(2, gap="large")
-    desc_style = f"margin-top:8px;background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;min-height:96px;box-sizing:border-box;"
+    # 强制固定高度，确保两边无论字数多少都绝对对齐
+    desc_style = f"background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;height:120px;box-sizing:border-box;overflow-y:auto;margin-bottom:15px;"
     
+    # 构造交互小圆点的JS代码
+    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
+
     with L:
-        lh1, lh2 = st.columns([0.78, 0.22])
-        with lh1: st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['vdg']}</div>", unsafe_allow_html=True)
-        with lh2: st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        # 左侧 Header（通过加入一个透明占位符让它和右侧的 Flex 排版高度完全相等）
+        st.markdown(f"""
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; height: 42px;'>
+                <div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; flex-grow: 1; margin-right: 15px;'>{t['vdg']}</div>
+                <div style='width: 60px;'></div>
+            </div>
+        """, unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['vdg_help']}</div>", unsafe_allow_html=True)
         
         up = st.file_uploader(t["up"], type=["jpg", "png"], key="f1")
-        pref = st.text_area(t["req"], height=120)
+        pref = st.text_area(t["req"], height=140, key="pref_l")
         
         if up: st.image(up, use_column_width=True)
         if st.button(t["gen"], use_container_width=True) and up:
@@ -383,16 +367,21 @@ def m_kitchen():
             except Exception as e: st.error(f"DB Error: {e}")
                 
     with R:
-        rh1, rh2 = st.columns([0.78, 0.22])
-        with rh1: st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700'>{t['eqa']}</div>", unsafe_allow_html=True)
-        with rh2:
-            st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
-            traffic_dots("kitchen_eq")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
+        # 右侧 Header 带装饰圆点
+        st.markdown(f"""
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; height: 42px;'>
+                <div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; flex-grow: 1; margin-right: 15px;'>{t['eqa']}</div>
+                <div style='width: 60px; display:flex; gap:7px; justify-content:flex-end; align-items:center;'>
+                    <button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#d1d1d1;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.35);" onclick="{red_btn_js}"></button>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.4);"></span>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.35);"></span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['eqa_help']}</div>", unsafe_allow_html=True)
+        
         up_nutri = st.file_uploader(t["up_opt"], type=["jpg", "png"], key="f2")
-        q = st.text_area(t["ask"], height=120)
+        q = st.text_area(t["ask"], height=140, key="ask_r")
         
         if up_nutri: st.image(up_nutri, use_column_width=True)
         if st.button(t["confirm"], use_container_width=True) and q:
@@ -404,8 +393,6 @@ def m_kitchen():
 def m_health():
     if not st.session_state.user: _require_login()
     st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;margin-bottom:10px'>{t['h_banner']}</div>", unsafe_allow_html=True)
-    ht1, ht2 = st.columns([0.09, 0.91])
-    with ht1: traffic_dots("health_win")
     
     left, right = st.columns([1, 2], gap="medium")
     with left:
@@ -488,8 +475,6 @@ def m_community():
 
     with main_col:
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
-        cd1, cd2 = st.columns([0.12, 0.88])
-        with cd1: traffic_dots("community_hall")
         
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
         parts = [f"<div style='background:{CHAT_MAIN_BG};padding:12px;border-radius:12px;margin-top:4px;'><div class='masonry'>"]
@@ -562,7 +547,6 @@ def m_community():
                 formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center'>🍲 {d}</div>" for d in lib])
                 st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
 
-
 # ---------- 8. 对话框组与原生隔离策略 ----------
 @st.dialog(t["pub"])
 def dlg_publish():
@@ -617,13 +601,13 @@ def _save_avatar(data_str: str):
 
 @st.dialog("更换头像 / Change Avatar")
 def dlg_avatar():
-    st.info("🔒 隐私保护：系统采用本地直传 Base64 技术，头像将安全加密存入数据库，拒绝公网图床嗅探。")
+    st.info("🔒 隐私保护：系统采用本地直传 Base64 技术，头像将安全加密存入数据库，拒绝公网暴露。")
     tab1, tab2 = st.tabs(["系统预设", "本地上传"])
     with tab1:
         cols = st.columns(4)
-        presets = ["Milo", "Felix", "Luna", "Aneka"]
+        presets = ["Alpha", "Beta", "Gamma", "Delta"]
         for i, p in enumerate(presets):
-            url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={p}"
+            url = f"https://api.dicebear.com/7.x/shapes/svg?seed={p}&backgroundColor=e6f2e0,c5d4b8"
             cols[i].image(url, width=60)
             if cols[i].button("选择", key=f"sel_{p}"):
                 _save_avatar(f"preset:{p}")
@@ -676,7 +660,16 @@ def m_profile():
         st.markdown("<div class='profile-side'>", unsafe_allow_html=True)
         pr1, pr2 = st.columns([0.62, 0.38])
         with pr2:
-            st.markdown("<div style='text-align:right;padding:4px 0'>", unsafe_allow_html=True); traffic_dots("profile_side"); st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align:right;padding:4px 0'>", unsafe_allow_html=True)
+            red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
+            st.markdown(f"""
+                <div style='display:flex; justify-content:flex-end; align-items:center; gap:7px;'>
+                    <button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;" onclick="{red_btn_js}"></button>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
+                </div>
+            """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
         
         # 接入动态头像模块数据查询
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
@@ -803,7 +796,17 @@ def render_home():
 
             with st.container(border=True):
                 w1, w2 = st.columns([0.14, 0.86])
-                with w1: traffic_dots("home_device")
+                
+                # 修改此处的 traffic_dots 使其不再依赖 components.html
+                with w1: 
+                    st.markdown("""
+                        <div style="display:flex;align-items:center;gap:7px;height:22px;padding-top:6px;">
+                            <span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;display:inline-block;"></span>
+                            <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;display:inline-block;"></span>
+                            <span style="width:12px;height:12px;border-radius:50%;background:#28c840;display:inline-block;"></span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
                 with w2: st.markdown("<div style='padding-top:2px;color:#333;font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
                 st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Midterm progress preview</div>", unsafe_allow_html=True)
                 st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
@@ -812,7 +815,8 @@ def render_home():
 if st.session_state.current_page == "Home": render_home()
 elif st.session_state.current_page == "Settings":
     ht1, ht2 = st.columns([0.12, 0.88])
-    with ht1: st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True); traffic_dots("settings_top"); st.markdown("</div>", unsafe_allow_html=True)
+    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
+    with ht1: st.markdown(f"<div style='padding-top:8px'><div style='display:flex; gap:7px;'><button onclick=\"{red_btn_js}\" style='width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;'></button><span style='width:12px;height:12px;border-radius:50%;background:#febc2e;'></span><span style='width:12px;height:12px;border-radius:50%;background:#28c840;'></span></div></div>", unsafe_allow_html=True)
     with ht2: st.markdown(f"### {t['set']}")
     st.markdown("---")
     col_t, col_l = st.columns(2)
@@ -826,12 +830,12 @@ elif st.session_state.current_page == "Settings":
         if new_la != st.session_state.lang: st.session_state.lang = new_la; st.rerun()
 elif st.session_state.current_page == "About":
     u1, u2 = st.columns([0.12, 0.88])
-    with u1: st.markdown("<div style='padding-top:4px'>", unsafe_allow_html=True); traffic_dots("about_top"); st.markdown("</div>", unsafe_allow_html=True)
+    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
+    with u1: st.markdown(f"<div style='padding-top:4px'><div style='display:flex; gap:7px;'><button onclick=\"{red_btn_js}\" style='width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;'></button><span style='width:12px;height:12px;border-radius:50%;background:#febc2e;'></span><span style='width:12px;height:12px;border-radius:50%;background:#28c840;'></span></div></div>", unsafe_allow_html=True)
     with u2: st.empty()
     m_about()
 else:
     if st.session_state.current_page == "A": m_kitchen()
     elif st.session_state.current_page == "B": m_health()
-    elif st.session_state.current_page == "C":
-        m_community()
+    elif st.session_state.current_page == "C": m_community()
     elif st.session_state.current_page == "D": m_profile()
