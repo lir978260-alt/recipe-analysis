@@ -1,10 +1,9 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-最新优化版：
-1. 彻底移除了所有无用的“红黄绿”窗口按钮。
-2. 删除了“极光黑”主题，保留四款浅色/护眼主题。
-3. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
-4. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
+防弹加固版：
+1. 修复 Cookie 管理器针对新访客返回非字符串类型导致的 TypeError 崩溃。
+2. 全局替换强字典索引 ['id'] 为 .get('id')，防止 Supabase 表结构差异导致的 KeyError 崩溃。
+3. 保留了极简 UI、PDF 下载、动态双语、动态主题和无公网暴露的头像 Base64 直存机制。
 """
 from __future__ import annotations
 
@@ -61,9 +60,9 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
         elif avatar_data.startswith("b64:"):
             av_url = avatar_data[4:]
         else:
-            av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(username, safe='')}&backgroundColor=6b8f6f,2f4a35"
+            av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(str(username), safe='')}&backgroundColor=6b8f6f,2f4a35"
     else:
-        av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(username, safe='')}&backgroundColor=6b8f6f,2f4a35"
+        av_url = f"https://api.dicebear.com/7.x/initials/svg?seed={quote(str(username), safe='')}&backgroundColor=6b8f6f,2f4a35"
 
     cam = _icon_path("camera")
     overlay = ""
@@ -116,14 +115,15 @@ for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "op
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
 if st.session_state.need_set_cookie:
-    cookie_manager.set("saved_user", st.session_state.user, expires_at=datetime.now() + timedelta(days=30))
+    cookie_manager.set("saved_user", str(st.session_state.user), expires_at=datetime.now() + timedelta(days=30))
     st.session_state.need_set_cookie = False
 if st.session_state.need_del_cookie:
     cookie_manager.delete("saved_user")
     st.session_state.need_del_cookie = False
 
 saved_user = cookie_manager.get(cookie="saved_user")
-if saved_user and st.session_state.user is None and not st.session_state.logout_flag:
+# 【防弹防御】强制判断 saved_user 必须是字符串，防止新用户初始化时返回 True 等杂数据
+if saved_user and isinstance(saved_user, str) and st.session_state.user is None and not st.session_state.logout_flag:
     st.session_state.user = saved_user
     st.rerun()
 
@@ -134,7 +134,6 @@ if st.query_params.get("_home") == "1":
 
 
 # ---------- 3. 动态主题颜色配置库 ----------
-# 删除了极光黑，保留四套精美配色
 theme_colors = {
     "🍵 抹茶绿 (Matcha Green)": {
         "SAGE_BG": "#e6f2e0", "DEEP_GREEN": "#2f4a35", "CREAM": "#f3f0e4", 
@@ -265,7 +264,6 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 顶栏悬浮按钮：强制不换行，彻底修复换行 Bug */
 .pill-btn > button {{ 
     background: {BTN_BG} !important; 
     color: {BTN_TEXT} !important; 
@@ -277,7 +275,6 @@ div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !im
 }}
 .pill-btn > button:hover {{ filter: brightness(0.9) !important; }}
 
-/* 左侧导航按钮统一样式 */
 .side-card button {{ 
     background: {BTN_BG} !important; color: {BTN_TEXT} !important; border-radius: 20px !important; 
     min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
@@ -306,7 +303,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
 
-/* 【UI 自适应微调 (Media Queries)】根据屏幕大小平滑缩放字体与间距 */
 @media screen and (max-width: 1200px) {{
     h2 {{ font-size: 1.6rem !important; }}
     .side-card button {{ font-size: 0.9rem !important; min-height: 45px !important; margin-bottom: 10px !important; }}
@@ -386,7 +382,6 @@ def _require_login():
 # 7. 统一返回主页按钮组件
 # ==========================================
 def top_back_btn():
-    """在每个功能页面的最上方渲染返回主大厅按钮"""
     if st.button("⬅️ " + t["back"], key=f"btn_back_{st.session_state.current_page}"):
         st.session_state.current_page = "Home"
         st.rerun()
@@ -401,7 +396,6 @@ def m_kitchen():
     desc_style = f"background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;height:120px;box-sizing:border-box;overflow-y:auto;margin-bottom:15px;"
 
     with L:
-        # 极简对称 Header
         st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; margin-bottom: 12px;'>{t['vdg']}</div>", unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['vdg_help']}</div>", unsafe_allow_html=True)
         
@@ -425,7 +419,6 @@ def m_kitchen():
             except Exception as e: st.error(f"DB Error: {e}")
                 
     with R:
-        # 极简对称 Header (移除了窗口按钮)
         st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; margin-bottom: 12px;'>{t['eqa']}</div>", unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['eqa_help']}</div>", unsafe_allow_html=True)
         
@@ -452,12 +445,13 @@ def m_health():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
         for r in logs_data:
+            # 防弹处理：使用 .get('id')
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
                 st.write(f"{t['b']}:{r.get('breakfast','')} {t['l']}:{r.get('lunch','')} {t['dn']}:{r.get('dinner','')}")
                 ce, cd = st.columns(2)
-                if ce.button(t["edit"], key=f"e_{r['id']}"): st.session_state.editing_id = r["id"]; st.rerun()
-                if cd.button(t["del"], key=f"d_{r['id']}"):
-                    try: supabase.table("diet_logs").delete().eq("id", r["id"]).execute(); st.rerun()
+                if ce.button(t["edit"], key=f"e_{r.get('id', 'temp')}"): st.session_state.editing_id = r.get("id"); st.rerun()
+                if cd.button(t["del"], key=f"d_{r.get('id', 'temp')}"):
+                    try: supabase.table("diet_logs").delete().eq("id", r.get("id")).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
         st.markdown(f"<div class='chart-box'>", unsafe_allow_html=True)
@@ -502,7 +496,7 @@ def _submit_vote(dish_name: str):
                 st.warning(t["voted"])
             else:
                 voters.append(st.session_state.user)
-                supabase.table("dish_ranking").update({"votes": record["votes"] + 1, "voted_by": voters}).eq("id", record["id"]).execute()
+                supabase.table("dish_ranking").update({"votes": record["votes"] + 1, "voted_by": voters}).eq("id", record.get("id")).execute()
                 st.rerun()
         else:
             supabase.table("dish_ranking").insert({"dish_name": dish_name, "votes": 1, "voted_by": [st.session_state.user]}).execute()
@@ -517,13 +511,15 @@ def m_community():
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
         if top_dishes:
             for d in top_dishes:
+                # 防弹处理：使用 d.get('id', d.get('dish_name'))，防止别人没建 id 列导致 KeyError
+                btn_key = f"hv_{d.get('id', d.get('dish_name', 'default'))}"
                 row_l, row_r = st.columns([0.78, 0.22], gap="small")
-                with row_l: st.markdown(f"<div class='rank-row'><span><b>{d['dish_name']}</b> — {d['votes']} {t['votes']}</span></div>", unsafe_allow_html=True)
+                with row_l: st.markdown(f"<div class='rank-row'><span><b>{d.get('dish_name','')}</b> — {d.get('votes',0)} {t['votes']}</span></div>", unsafe_allow_html=True)
                 with row_r:
                     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                     hp = _icon_path("heart")
                     if hp: st.image(str(hp), width=26)
-                    if st.session_state.user and st.button(" " if hp else "♥", key=f"hv_{d['id']}", help=t["c_vote"], use_container_width=True): _submit_vote(d["dish_name"])
+                    if st.session_state.user and st.button(" " if hp else "♥", key=btn_key, help=t["c_vote"], use_container_width=True): _submit_vote(d.get("dish_name"))
         else: st.info(t["no_data"])
 
     with main_col:
@@ -539,21 +535,21 @@ def m_community():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['c_t2']}**</div>", unsafe_allow_html=True)
         for r in comments_data:
             with st.container(border=True):
-                st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
+                st.write(f"**{r.get('user_name','')}** | 🏷️ {r.get('tag','')}\n### {r.get('dish_name','')}\n{r.get('comment','')}")
                 lk = r.get("liked_by") if isinstance(r.get("liked_by"), list) else []
                 has_liked = (st.session_state.user in lk) if st.session_state.user else False
-                if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r['id']}", disabled=(not st.session_state.user or has_liked)):
-                    lk.append(st.session_state.user); supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r["id"]).execute(); st.rerun()
+                if st.button(f"{t['like']} ({r.get('likes', 0)})", key=f"l_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
+                    lk.append(st.session_state.user); supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute(); st.rerun()
                 reps = r.get("replies") if isinstance(r.get("replies"), list) else []
                 if reps:
                     st.markdown("---")
                     for rep in reps: st.caption(f"💬 **{rep.get('u', 'User')}**: {rep.get('t', '')}")
                 if st.session_state.user:
                     with st.expander(t["reply"]):
-                        rep_text = st.text_input(t["reply_ph"], key=f"rt_{r['id']}")
-                        if st.button(t["send"], key=f"rs_{r['id']}") and rep_text:
+                        rep_text = st.text_input(t["reply_ph"], key=f"rt_{r.get('id', 'temp')}")
+                        if st.button(t["send"], key=f"rs_{r.get('id', 'temp')}") and rep_text:
                             reps.append({"u": st.session_state.user, "t": rep_text})
-                            try: supabase.table("comments").update({"replies": reps}).eq("id", r["id"]).execute(); st.rerun()
+                            try: supabase.table("comments").update({"replies": reps}).eq("id", r.get("id")).execute(); st.rerun()
                             except Exception as e: st.error(str(e))
 
         st.markdown("<div class='footer-bar'>", unsafe_allow_html=True)
@@ -701,7 +697,7 @@ def m_profile():
                     with st.container(border=True):
                         st.markdown(f"**{p.get('dish_name','')}**")
                         st.caption((p.get("comment") or "")[:120])
-                        if st.button(t["del_post"], key=f"dp_{p['id']}"): supabase.table("comments").delete().eq("id", p["id"]).execute(); st.rerun()
+                        if st.button(t["del_post"], key=f"dp_{p.get('id', 'temp')}"): supabase.table("comments").delete().eq("id", p.get("id")).execute(); st.rerun()
 
         st.markdown(f"<div class='section-head' style='margin-top:14px'>{t['u_hist']}</div>", unsafe_allow_html=True)
         favs = supabase.table("favorites").select("*").eq("username", st.session_state.user).order("id", desc=True).execute().data
@@ -712,14 +708,11 @@ def m_profile():
                 with fcs[i % 3]:
                     with st.container(border=True):
                         if f.get("recipe_content"):
-                            with st.expander(t["fav"]): st.markdown(f["recipe_content"])
-                        if st.button(t["unfav"], key=f"uf_{f['id']}"): supabase.table("favorites").delete().eq("id", f["id"]).execute(); st.rerun()
+                            with st.expander(t["fav"]): st.markdown(f.get("recipe_content"))
+                        if st.button(t["unfav"], key=f"uf_{f.get('id', 'temp')}"): supabase.table("favorites").delete().eq("id", f.get("id")).execute(); st.rerun()
 
     with R:
         st.markdown("<div class='profile-side'>", unsafe_allow_html=True)
-        pr1, pr2 = st.columns([0.62, 0.38])
-        with pr2:
-            st.empty() # 移除了之前的红黄绿小圆点按钮
         
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
@@ -742,17 +735,8 @@ def m_profile():
         if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
 
-def m_about():
-    imgs = _team_images()
-    if not imgs:
-        st.warning("未找到 static/team 图片。")
-        return
-    st.markdown("<div style='max-height:88vh;overflow-y:auto;padding-right:8px'>", unsafe_allow_html=True)
-    for p in imgs: st.image(str(p), use_column_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ---------- 9. 主页渲染 ----------
+# ---------- 9. 布局分发渲染 ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
@@ -795,7 +779,8 @@ def render_home():
             st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
-        display_name = st.session_state.user if st.session_state.user else t["guest"]
+        # 【防弹处理】强制将内容转换为字符串 str()，防止 Streamlit 解析布尔值报错
+        display_name = str(st.session_state.user) if st.session_state.user else str(t["guest"])
         if st.button(display_name, key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
             else: dlg_login()
@@ -837,18 +822,34 @@ def render_home():
             with st.container(border=True):
                 w1, w2 = st.columns([0.14, 0.86])
                 with w1: 
-                    # 移除了中间容器的红黄绿点，放了一个干净的文档图标以保持视觉平衡
                     st.markdown("<div style='font-size:1.5rem;text-align:center;'>📄</div>", unsafe_allow_html=True)
                 with w2: st.markdown(f"<div style='padding-top:2px;color:{TEXT_MAIN};font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
-                st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Midterm progress preview</div>", unsafe_allow_html=True)
+                
+                about_img = ROOT / "about.jpg"
+                if not about_img.is_file():
+                    about_img = STATIC / "about.jpg"
+                    
+                if about_img.is_file():
+                    st.image(str(about_img), use_column_width=True)
+                else:
+                    st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Please place about.jpg in the directory</div>", unsafe_allow_html=True)
+                    
                 st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
 
 
 # ---------- 10. 路由分发渲染 ----------
+def m_about():
+    imgs = _team_images()
+    if not imgs:
+        st.warning("未找到 static/team 图片。")
+        return
+    st.markdown("<div style='max-height:88vh;overflow-y:auto;padding-right:8px'>", unsafe_allow_html=True)
+    for p in imgs: st.image(str(p), use_column_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
 if st.session_state.current_page == "Home": 
     render_home()
 else:
-    # 全局在所有子页面顶部注入返回大厅按钮
     top_back_btn()
     
     if st.session_state.current_page == "A": m_kitchen()
