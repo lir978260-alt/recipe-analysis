@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 修复了健康数据页面折线图上方出现多余灰色空白框的渲染 Bug。
-2. 彻底移除了所有无用的“红黄绿”窗口按钮。
-3. 删除了“极光黑”主题，保留四款浅色/护眼主题。
-4. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
+1. 升级 About 页面渲染引擎，精准支持 group.png、time1.jpg、time2.jpg 按顺序自动拼合。
+2. 修复了健康数据页面折线图上方出现多余灰色空白框的渲染 Bug。
+3. 彻底移除了所有无用的“红黄绿”窗口按钮，保留四款浅色/护眼主题。
+4. 全局引入 top_back_btn()，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
 5. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
 """
 from __future__ import annotations
@@ -85,8 +85,9 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
     )
 
 def _team_images() -> list[Path]:
+    """升级版扫描引擎：兼容读取 group.png, team.png, time1.jpg, time2.jpg"""
     out: list[Path] = []
-    for base in ("team", "time1", "time2"):
+    for base in ("group", "team", "time1", "time2"):
         hit = None
         for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
             p = TEAM_DIR / f"{base}{ext}"
@@ -94,6 +95,9 @@ def _team_images() -> list[Path]:
                 hit = p
                 break
         if hit:
+            # 防止同时加载 group 和 team 造成重复
+            if base == "team" and any(path.stem == "group" for path in out):
+                continue
             out.append(hit)
     return out
 
