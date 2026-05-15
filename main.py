@@ -1,11 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-最终升级版：
-1. 修复了顶栏“设置”等按钮在窄屏下自动换行变两行的 Bug。
-2. 引入了轻量级 UI 自适应（Media Queries），根据屏幕宽度微调字体大小和元素间距。
-3. 移除独立语言按钮，将【语言切换】与【主题配色】统一收纳至“设置(⚙️)”弹窗。
-4. 强绑定 AI 双语系统，新增 5 款精美 UI 动态主题色库。
-5. 修复了原生 HTML 组件报错，具备完全对称布局及本地 PDF 直传免跳转下载。
+最新优化版：
+1. 彻底移除了所有无用的“红黄绿”窗口按钮。
+2. 删除了“极光黑”主题，保留四款浅色/护眼主题。
+3. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
+4. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
 """
 from __future__ import annotations
 
@@ -135,6 +134,7 @@ if st.query_params.get("_home") == "1":
 
 
 # ---------- 3. 动态主题颜色配置库 ----------
+# 删除了极光黑，保留四套精美配色
 theme_colors = {
     "🍵 抹茶绿 (Matcha Green)": {
         "SAGE_BG": "#e6f2e0", "DEEP_GREEN": "#2f4a35", "CREAM": "#f3f0e4", 
@@ -155,11 +155,6 @@ theme_colors = {
         "SAGE_BG": "#f6ddcc", "DEEP_GREEN": "#4a2311", "CREAM": "#fdf2e9", 
         "CHAT_MAIN_BG": "#edbb99", "COMM_RANK_SIDEBAR": "#873600", 
         "RANK_CARD_BG": "#e59866", "BTN_BG": "#808080", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#1a1a1a"
-    },
-    "🌌 极光黑 (Aurora Dark)": {
-        "SAGE_BG": "#1e1e1e", "DEEP_GREEN": "#000000", "CREAM": "#2c3e50", 
-        "CHAT_MAIN_BG": "#34495e", "COMM_RANK_SIDEBAR": "#2c3e50", 
-        "RANK_CARD_BG": "#566573", "BTN_BG": "#5d6d7e", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#fdfdfe"
     }
 }
 
@@ -201,7 +196,8 @@ i18n = {
         "new_pwd": "设置新密码", "confirm": "确认", "unfav": "🤍 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复",
         "reply_ph": "写下回复...", "send": "发送", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
         "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)",
-        "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票"
+        "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票",
+        "back": "返回大厅"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
@@ -223,7 +219,8 @@ i18n = {
         "new_pwd": "Create Password", "confirm": "Confirm", "unfav": "🤍 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply",
         "reply_ph": "Write a reply...", "send": "Send", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
         "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)",
-        "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes"
+        "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes",
+        "back": "Back to Home"
     },
 }
 t = i18n[st.session_state.lang]
@@ -268,7 +265,7 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 【核心修复】：顶栏悬浮按钮强制不换行，且最小宽度自适应，解决两行堆叠 Bug */
+/* 顶栏悬浮按钮：强制不换行，彻底修复换行 Bug */
 .pill-btn > button {{ 
     background: {BTN_BG} !important; 
     color: {BTN_TEXT} !important; 
@@ -386,20 +383,26 @@ def _require_login():
 
 
 # ==========================================
-# 7. 各功能页面区
+# 7. 统一返回主页按钮组件
+# ==========================================
+def top_back_btn():
+    """在每个功能页面的最上方渲染返回主大厅按钮"""
+    if st.button("⬅️ " + t["back"], key=f"btn_back_{st.session_state.current_page}"):
+        st.session_state.current_page = "Home"
+        st.rerun()
+    st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'/>", unsafe_allow_html=True)
+
+
+# ==========================================
+# 8. 各功能页面区
 # ==========================================
 def m_kitchen():
     L, R = st.columns(2, gap="large")
     desc_style = f"background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;height:120px;box-sizing:border-box;overflow-y:auto;margin-bottom:15px;"
-    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
 
     with L:
-        st.markdown(f"""
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; height: 42px;'>
-                <div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; flex-grow: 1; margin-right: 15px;'>{t['vdg']}</div>
-                <div style='width: 60px;'></div>
-            </div>
-        """, unsafe_allow_html=True)
+        # 极简对称 Header
+        st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; margin-bottom: 12px;'>{t['vdg']}</div>", unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['vdg_help']}</div>", unsafe_allow_html=True)
         
         up = st.file_uploader(t["up"], type=["jpg", "png"], key="f1")
@@ -422,16 +425,8 @@ def m_kitchen():
             except Exception as e: st.error(f"DB Error: {e}")
                 
     with R:
-        st.markdown(f"""
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; height: 42px;'>
-                <div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; flex-grow: 1; margin-right: 15px;'>{t['eqa']}</div>
-                <div style='width: 60px; display:flex; gap:7px; justify-content:flex-end; align-items:center;'>
-                    <button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.35);" onclick="{red_btn_js}"></button>
-                    <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.4);"></span>
-                    <span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.35);"></span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+        # 极简对称 Header (移除了窗口按钮)
+        st.markdown(f"<div style='background:{DEEP_GREEN};color:#fff;padding:10px 12px;border-radius:10px;font-weight:700; margin-bottom: 12px;'>{t['eqa']}</div>", unsafe_allow_html=True)
         st.markdown(f"<div style='{desc_style}'>{t['eqa_help']}</div>", unsafe_allow_html=True)
         
         up_nutri = st.file_uploader(t["up_opt"], type=["jpg", "png"], key="f2")
@@ -724,16 +719,7 @@ def m_profile():
         st.markdown("<div class='profile-side'>", unsafe_allow_html=True)
         pr1, pr2 = st.columns([0.62, 0.38])
         with pr2:
-            st.markdown("<div style='text-align:right;padding:4px 0'>", unsafe_allow_html=True)
-            red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
-            st.markdown(f"""
-                <div style='display:flex; justify-content:flex-end; align-items:center; gap:7px;'>
-                    <button type="button" aria-label="close" style="width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;padding:0;" onclick="{red_btn_js}"></button>
-                    <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
-                    <span style="width:12px;height:12px;border-radius:50%;background:#28c840;border:0.5px solid rgba(0,0,0,.22);display:inline-block;"></span>
-                </div>
-            """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.empty() # 移除了之前的红黄绿小圆点按钮
         
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
@@ -756,8 +742,17 @@ def m_profile():
         if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
 
+def m_about():
+    imgs = _team_images()
+    if not imgs:
+        st.warning("未找到 static/team 图片。")
+        return
+    st.markdown("<div style='max-height:88vh;overflow-y:auto;padding-right:8px'>", unsafe_allow_html=True)
+    for p in imgs: st.image(str(p), use_column_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- 9. 布局分发渲染 ----------
+
+# ---------- 9. 主页渲染 ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
@@ -842,27 +837,22 @@ def render_home():
             with st.container(border=True):
                 w1, w2 = st.columns([0.14, 0.86])
                 with w1: 
-                    st.markdown("""
-                        <div style="display:flex;align-items:center;gap:7px;height:22px;padding-top:6px;">
-                            <span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;display:inline-block;"></span>
-                            <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;display:inline-block;"></span>
-                            <span style="width:12px;height:12px;border-radius:50%;background:#28c840;display:inline-block;"></span>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    # 移除了中间容器的红黄绿点，放了一个干净的文档图标以保持视觉平衡
+                    st.markdown("<div style='font-size:1.5rem;text-align:center;'>📄</div>", unsafe_allow_html=True)
                 with w2: st.markdown(f"<div style='padding-top:2px;color:{TEXT_MAIN};font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
                 st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Midterm progress preview</div>", unsafe_allow_html=True)
                 st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
 
 
-if st.session_state.current_page == "Home": render_home()
-elif st.session_state.current_page == "About":
-    u1, u2 = st.columns([0.12, 0.88])
-    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
-    with u1: st.markdown(f"<div style='padding-top:4px'><div style='display:flex; gap:7px;'><button onclick=\"{red_btn_js}\" style='width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;'></button><span style='width:12px;height:12px;border-radius:50%;background:#febc2e;'></span><span style='width:12px;height:12px;border-radius:50%;background:#28c840;'></span></div></div>", unsafe_allow_html=True)
-    with u2: st.empty()
-    m_about()
+# ---------- 10. 路由分发渲染 ----------
+if st.session_state.current_page == "Home": 
+    render_home()
 else:
+    # 全局在所有子页面顶部注入返回大厅按钮
+    top_back_btn()
+    
     if st.session_state.current_page == "A": m_kitchen()
     elif st.session_state.current_page == "B": m_health()
     elif st.session_state.current_page == "C": m_community()
     elif st.session_state.current_page == "D": m_profile()
+    elif st.session_state.current_page == "About": m_about()
