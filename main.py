@@ -1,10 +1,11 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 1. 抛弃 FastAPI，回归纯净 Streamlit 单文件架构。
-2. 还原视频 UI 设计稿布局（左侧导航绿框）。
-3. 厨房模块 UI 绝对对称，自动适应。
-4. 使用 st.download_button 彻底解决 PDF 无法下载/按钮变灰问题。
-5. 包含完整的 100 款中英双语菜谱。
+2. 还原视频 UI 设计稿布局（左侧导航栏去除深绿背景，融入浅色主背景）。
+3. 左侧导航按钮底色全部统一为 #808080 灰色。
+4. 厨房模块 UI 绝对对称，自动适应。
+5. 使用 st.download_button 彻底解决 PDF 无法下载/按钮变灰问题。
+6. 包含完整的 100 款中英双语菜谱。
 """
 from __future__ import annotations
 
@@ -232,7 +233,6 @@ dish_library = {
 
 # ---------- 5. 核心样式与 CSS ----------
 SAGE_BG = "#e6f2e0"
-SIDE_BG = "#6b8f6f"
 DEEP_GREEN = "#2f4a35"
 CREAM = "#f3f0e4"
 CHAT_MAIN_BG = "#c5d4b8"
@@ -249,15 +249,29 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
 .pill-btn > button {{ background: {DEEP_GREEN} !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
-.side-card button {{ background: #ffffff !important; color: #1a1a1a !important; border-radius: 12px !important; min-height: 70px !important; white-space: pre-wrap !important; text-align: left !important; border: none !important; font-weight: bold !important; margin-bottom: 8px !important; }}
-.side-card button:hover {{ background: #f0f0f0 !important; }}
 
-/* 原生下载按钮定制：将主按钮样式(Primary)覆盖为深绿色，完美融入左侧导航 */
+/* 【核心修改】将侧边栏按钮和下载按钮的底色统一改为灰色 #808080，文字为白色 */
+.side-card button {{ 
+    background: #808080 !important; 
+    color: #ffffff !important; 
+    border-radius: 12px !important; 
+    min-height: 70px !important; 
+    white-space: pre-wrap !important; 
+    text-align: left !important; 
+    border: none !important; 
+    font-weight: bold !important; 
+    margin-bottom: 8px !important; 
+}}
+.side-card button:hover {{ background: #666666 !important; }}
+
 div[data-testid="stDownloadButton"] > button[kind="primary"] {{
-    display: block; width: 100%; background: {DEEP_GREEN} !important; color: #fff !important; text-align: center; border-radius: 12px !important; padding: 10px 14px !important; border: none !important; font-weight: 600 !important;
+    display: block; width: 100%; 
+    background: #808080 !important; 
+    color: #ffffff !important; 
+    text-align: center; border-radius: 12px !important; padding: 10px 14px !important; border: none !important; font-weight: 600 !important;
 }}
 div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
-    filter: brightness(1.1) !important; color: #fff !important; border: none !important;
+    background: #666666 !important; color: #ffffff !important; border: none !important;
 }}
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
@@ -546,7 +560,7 @@ def m_community():
                 formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center'>🍲 {d}</div>" for d in lib])
                 st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
 
-@st.dialog("发布动态")
+@st.dialog(t["pub"])
 def dlg_publish():
     tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sys_lang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
     tag = st.selectbox(t["tag"], tag_opts)
@@ -561,7 +575,7 @@ def dlg_publish():
             st.session_state.open_publish = False; st.rerun()
         except Exception as e: st.error(str(e))
 
-@st.dialog("NEW PASSWORD")
+@st.dialog(t["new_pwd_title"])
 def dlg_pw():
     npw = st.text_input(t["new_pwd"], type="password")
     a1, a2 = st.columns(2)
@@ -647,12 +661,14 @@ def dlg_signup():
         if supabase.table("app_users").select("*").eq("username", nu).execute().data: st.error(t["err"])
         else: supabase.table("app_users").insert({"username": nu, "password": np}).execute(); st.session_state.open_signup = False; st.success(t["suc"]); st.rerun()
 
-# ---------- 8. 原汁原味分栏渲染：完美契合视频 UI ----------
+
+# ---------- 8. 原汁原味分栏渲染：左侧完全融入背景，按钮灰色 ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
     with side:
-        st.markdown(f"<div style='background:{SIDE_BG};padding:14px;border-radius:14px;min-height:720px'>", unsafe_allow_html=True)
+        # 【核心修改 1】：删去深绿色背景（去除 background:{SIDE_BG};）
+        st.markdown(f"<div style='padding:14px;min-height:720px'>", unsafe_allow_html=True)
         st.markdown("### ")
         
         for page, label in [("A", t["m1"]), ("C", t["m2"]), ("B", t["m3"])]:
@@ -662,9 +678,9 @@ def render_home():
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown(f"<div style='color:#fff;margin:12px 0 6px 0;font-size:0.95rem'>{t['dl_hint']}</div>", unsafe_allow_html=True)
+        # 【核心修改 2】：字体颜色改为深色 #1a1a1a 以在浅色背景上保持清晰
+        st.markdown(f"<div style='color:#1a1a1a;margin:12px 0 6px 0;font-size:0.95rem;font-weight:600'>{t['dl_hint']}</div>", unsafe_allow_html=True)
         
-        # 核心改动：使用原生组件实现安全下载
         pdf_path = None
         for file in ROOT.rglob("*.pdf"):
             pdf_path = file
@@ -685,8 +701,9 @@ def render_home():
 
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
         na1, na2 = st.columns([0.72, 0.28], gap="small")
-        with na1: st.markdown(f"<div style='color:#fff;padding-top:6px'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
-        with na2: st.markdown("<div style='color:#fff;font-size:1.6rem;line-height:1'>👤</div>", unsafe_allow_html=True)
+        # 字体颜色同步改为深色 #1a1a1a
+        with na1: st.markdown(f"<div style='color:#1a1a1a;padding-top:6px;font-weight:bold;'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
+        with na2: st.markdown("<div style='color:#1a1a1a;font-size:1.6rem;line-height:1'>👤</div>", unsafe_allow_html=True)
 
         if st.button((st.session_state.user or "Guest"), key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
