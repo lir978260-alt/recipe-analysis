@@ -1,11 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 重构首页“关于项目”图片模块，解除宽度限制，引入全宽 Banner (横幅) 级视觉效果。
-2. 使用 object-fit: cover 和 360px 固定高度，使右侧图片与左侧导航高度完美齐平。
-3. 彻底移除了所有无用的“红黄绿”窗口按钮，保留四款浅色/护眼主题。
-4. 全局引入 top_back_btn()，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
-5. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
+1. 重构首页“关于项目”图片模块，解除强制高度裁剪，图片等比例放大，不丢失任何细节。
+2. 彻底移除了所有无用的“红黄绿”窗口按钮，保留四款浅色/护眼主题。
+3. 全局引入 top_back_btn()，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
+4. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
 """
 from __future__ import annotations
 
@@ -812,7 +811,6 @@ def render_home():
 
         st.caption(f"<span style='color:{TEXT_MAIN};'>Group3 / Product Owner: TrungHieu Le</span>", unsafe_allow_html=True)
 
-        # ---------------- 【核心更新区域：全屏 Banner 渲染】 ----------------
         if st.button(t["about"], use_container_width=True): 
             st.session_state.current_page = "About"
             st.rerun()
@@ -822,11 +820,11 @@ def render_home():
             about_img = STATIC / "about.jpg"
             
         if about_img.is_file():
-            # 将图片转为 Base64 并使用 CSS object-fit 强制锁定高度为 360px，完美对齐左侧导航
+            # 移除高度锁定与裁剪，让图片等比例自然撑开
             img_b64 = base64.b64encode(about_img.read_bytes()).decode()
             st.markdown(f'''
-                <div style="width:100%; height:360px; border-radius:12px; overflow:hidden; margin-top:8px; border: 1px solid rgba(150,150,150,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                    <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="About Project Banner">
+                <div style="width:100%; border-radius:12px; overflow:hidden; margin-top:8px; border: 1px solid rgba(150,150,150,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <img src="data:image/jpeg;base64,{img_b64}" style="width:100%; height:auto; display:block;" alt="About Project Banner">
                 </div>
             ''', unsafe_allow_html=True)
         else:
