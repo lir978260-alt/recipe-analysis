@@ -1,13 +1,14 @@
 """
 AI Health Ecosystem — Streamlit 网页端 (极致安全 & 平滑升级版)
 核心特性：
-1. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制，不影响老用户。
-2. [密码安全] 新密码强制使用 PBKDF2_HMAC + 动态盐值进行 10万次哈希加密。
-3. [防 XSS] 所有用户生成的动态内容在渲染 HTML 前强制通过 html.escape() 转义。
-4. [防越权] 删除/修改操作强制绑定当前会话用户，杜绝抓包篡改他人数据。
-5. [图片安检] 社区配图强制重采样清洗，拦截恶意脚本并限制文件大小。
-6. [防篡改] 带有 HMAC 签名的安全 Cookie。
-7. [极致 UI] 全宽图片 Banner、原生左侧滚动排行榜、右侧吸顶发布按钮与纯净瀑布流。
+1. [Bug修复] 修复了未登录时点击侧边栏“访客(点击登录)”按钮被 st.rerun() 强制截断导致对话框不弹出的问题。
+2. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制，不影响老用户。
+3. [密码安全] 新密码强制使用 PBKDF2_HMAC + 动态盐值进行 10万次哈希加密。
+4. [防 XSS] 所有用户生成的动态内容在渲染 HTML 前强制通过 html.escape() 转义。
+5. [防越权] 删除/修改操作强制绑定当前会话用户，杜绝抓包篡改他人数据。
+6. [图片安检] 社区配图强制重采样清洗，拦截恶意脚本并限制文件大小。
+7. [防篡改] 带有 HMAC 签名的安全 Cookie。
+8. [极致 UI] 全宽图片 Banner、原生左侧滚动排行榜、右侧吸顶发布按钮与纯净瀑布流。
 """
 from __future__ import annotations
 
@@ -501,7 +502,6 @@ def m_kitchen():
 
         if st.session_state.get("l_rec") and st.session_state.user and st.button(t["fav"]):
             try:
-                # 防越权
                 supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
                 st.success(t["suc"])
             except Exception as e: st.error(f"DB Error: {e}")
@@ -533,7 +533,6 @@ def m_health():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
         for r in logs_data:
-            # 防 XSS
             safe_b = html.escape(str(r.get('breakfast','')))
             safe_l = html.escape(str(r.get('lunch','')))
             safe_dn = html.escape(str(r.get('dinner','')))
@@ -543,7 +542,6 @@ def m_health():
                 if ce.button(t["edit"], key=f"e_{r.get('id', 'temp')}"): st.session_state.editing_id = r.get("id"); st.rerun()
                 if cd.button(t["del"], key=f"d_{r.get('id', 'temp')}"):
                     try: 
-                        # 防越权
                         supabase.table("diet_logs").delete().eq("id", r.get("id")).eq("username", st.session_state.user).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
@@ -570,7 +568,6 @@ def m_health():
                 payload = {"username": st.session_state.user, "log_date": str(d), "weight": float(w), "calories": cal, "breakfast": str(b), "lunch": str(l), "dinner": str(dn)}
                 try:
                     if st.session_state.editing_id:
-                        # 防越权
                         supabase.table("diet_logs").update(payload).eq("id", st.session_state.editing_id).eq("username", st.session_state.user).execute()
                         st.session_state.editing_id = None
                     else:
@@ -672,7 +669,6 @@ def m_community():
         with st.container(height=650):
             for r in comments_data:
                 with st.container(border=True):
-                    # 防 XSS
                     safe_u = html.escape(str(r.get('user_name','')))
                     safe_tag = html.escape(str(r.get('tag','')))
                     safe_dish = html.escape(str(r.get('dish_name','')))
@@ -767,11 +763,9 @@ def dlg_login():
         if res:
             stored_hash = res[0].get("password", "")
             
-            # 【无感平滑升级逻辑】
             is_valid, needs_upgrade = verify_password_with_upgrade(stored_hash, str(p))
             
             if is_valid:
-                # 如果发现老用户使用的是明文密码，在后台自动帮他哈希覆盖
                 if needs_upgrade:
                     new_secure_hash = hash_password(str(p))
                     supabase.table("app_users").update({"password": new_secure_hash}).eq("username", str(u)).execute()
@@ -825,7 +819,7 @@ def dlg_avatar():
                 if err:
                     st.error(err)
                 else:
-                    _save_avatar(f"b64:{img_b64_str.split(',')[1]}") # 适配历史格式
+                    _save_avatar(f"b64:{img_b64_str.split(',')[1]}")
 
 def _save_profile_name(key: str):
     if not st.session_state.user: return
@@ -940,9 +934,11 @@ def render_home():
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
         display_name = html.escape(str(st.session_state.user)) if st.session_state.user else str(t["guest"])
         if st.button(display_name, key="side_user", use_container_width=True):
-            if st.session_state.user: st.session_state.current_page = "D"
-            else: dlg_login()
-            st.rerun()
+            if st.session_state.user: 
+                st.session_state.current_page = "D"
+                st.rerun()
+            else: 
+                dlg_login()
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
