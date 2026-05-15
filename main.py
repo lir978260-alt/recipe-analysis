@@ -1,15 +1,16 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-1. 抛弃 FastAPI，回归纯净 Streamlit 单文件架构。
-2. 还原视频 UI 设计稿布局（左侧导航栏去除深绿背景，融入浅色主背景）。
-3. 左侧导航按钮底色全部统一为 #808080 灰色。
-4. 厨房模块 UI 绝对对称，自动适应。
-5. 使用 st.download_button 彻底解决 PDF 无法下载/按钮变灰问题。
-6. 包含完整的 100 款中英双语菜谱。
+最终完美版：
+1. 彻底移除左侧导航的深绿色背景框，融入全局浅绿背景。
+2. 功能栏上移，与右侧图片区域高度对齐。
+3. 侧边栏按钮和下载按钮底色统一为 #808080，文字对比度适配。
+4. 修复 components.html 报错，支持本地 PDF 原生下载。
+5. 包含 100 款动态菜品库。
 """
 from __future__ import annotations
 
 import base64
+import html
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -248,19 +249,20 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-.pill-btn > button {{ background: {DEEP_GREEN} !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
+/* 右上角按钮样式 */
+.pill-btn > button {{ background: #808080 !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
 
-/* 【核心修改】将侧边栏按钮和下载按钮的底色统一改为灰色 #808080，文字为白色 */
+/* 【核心修改】将侧边栏按钮和下载按钮的底色统一改为灰色 #808080，文字为白色，边缘加一点深色边框增强立体感 */
 .side-card button {{ 
     background: #808080 !important; 
     color: #ffffff !important; 
-    border-radius: 12px !important; 
-    min-height: 70px !important; 
+    border-radius: 20px !important; 
+    min-height: 50px !important; 
     white-space: pre-wrap !important; 
-    text-align: left !important; 
-    border: none !important; 
+    text-align: center !important; 
+    border: 2px solid #ffffff !important; 
     font-weight: bold !important; 
-    margin-bottom: 8px !important; 
+    margin-bottom: 15px !important; 
 }}
 .side-card button:hover {{ background: #666666 !important; }}
 
@@ -268,11 +270,24 @@ div[data-testid="stDownloadButton"] > button[kind="primary"] {{
     display: block; width: 100%; 
     background: #808080 !important; 
     color: #ffffff !important; 
-    text-align: center; border-radius: 12px !important; padding: 10px 14px !important; border: none !important; font-weight: 600 !important;
+    text-align: center; border-radius: 8px !important; padding: 8px 14px !important; border: none !important; font-weight: 600 !important;
 }}
 div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
     background: #666666 !important; color: #ffffff !important; border: none !important;
 }}
+
+/* 账户/名称 按钮同样应用灰色 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stButton"] > button {{
+    background: #808080 !important; 
+    color: #ffffff !important; 
+    border-radius: 8px !important; 
+    border: none !important;
+    font-weight: bold !important;
+}}
+div[data-testid="stVerticalBlock"] > div[data-testid="stButton"] > button:hover {{
+    background: #666666 !important;
+}}
+
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
 .masonry {{ column-count: 4; column-gap: 10px; }}
@@ -667,9 +682,9 @@ def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
     with side:
-        # 【核心修改 1】：删去深绿色背景（去除 background:{SIDE_BG};）
-        st.markdown(f"<div style='padding:14px;min-height:720px'>", unsafe_allow_html=True)
-        st.markdown("### ")
+        # 【核心修改 1】：完全移除 background 和 min-height，让功能栏自然上移并融入背景
+        st.markdown(f"<div style='padding:14px'>", unsafe_allow_html=True)
+        # 移除掉没用的空占位 st.markdown("### ")
         
         for page, label in [("A", t["m1"]), ("C", t["m2"]), ("B", t["m3"])]:
             st.markdown('<div class="side-card">', unsafe_allow_html=True)
@@ -678,7 +693,7 @@ def render_home():
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # 【核心修改 2】：字体颜色改为深色 #1a1a1a 以在浅色背景上保持清晰
+        # 文字改为深色 #1a1a1a 以在浅色背景上保持清晰
         st.markdown(f"<div style='color:#1a1a1a;margin:12px 0 6px 0;font-size:0.95rem;font-weight:600'>{t['dl_hint']}</div>", unsafe_allow_html=True)
         
         pdf_path = None
@@ -713,7 +728,7 @@ def render_home():
 
     with main:
         top = st.columns([5, 1, 1, 1, 1])
-        top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
+        top[0].markdown(f"<h2 style='margin:0;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
         with top[1]:
             st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
             if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
