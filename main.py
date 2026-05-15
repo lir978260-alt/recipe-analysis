@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新防弹优化版：
-1. 修复了“推荐菜品”按钮点击无反应的 Ghost Click Bug（搜索状态保留与自动收起逻辑）。
-2. 将排行榜容器高度精确锁定在 360px，刚好展示前 5 个菜品，其余菜品通过右侧原生滑动条浏览。
-3. 彻底修复了社区页面由于字典键值冲突导致的 KeyError Bug。
-4. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的高级瀑布流 (Masonry) 展示。
+1. 补全国际化双语字典，修复个人主页“更换头像”与“修改”密码按钮硬编码中文的问题。
+2. 将右侧社区动态流放入定高内滚容器 (height=650)，实现“发布动态”按钮吸顶停留的完美交互。
+3. 排行榜精确锁定高度展示前 5 个菜品，其余通过右侧原生滑动条浏览。
+4. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的卡片动态。
 5. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
 """
 from __future__ import annotations
@@ -85,7 +85,6 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
     )
 
 def _team_images() -> list[Path]:
-    """升级版扫描引擎：兼容读取 group.png, team.png, time1.jpg, time2.jpg"""
     out: list[Path] = []
     for base in ("group", "team", "time1", "time2"):
         hit = None
@@ -200,7 +199,8 @@ i18n = {
         "reply_ph": "写下回复...", "send": "发送", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
         "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)",
         "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票",
-        "back": "返回大厅", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", "rec_ph": "输入菜名并回车进行搜索..."
+        "back": "返回大厅", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", "rec_ph": "输入菜名并回车进行搜索...",
+        "change_avatar": "📸 更换头像", "edit_btn": "修改"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
@@ -223,7 +223,8 @@ i18n = {
         "reply_ph": "Write a reply...", "send": "Send", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
         "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)",
         "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes",
-        "back": "Back to Home", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:", "rec_ph": "Type dish name and press Enter..."
+        "back": "Back to Home", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:", "rec_ph": "Type dish name and press Enter...",
+        "change_avatar": "📸 Change Avatar", "edit_btn": "Edit"
     },
 }
 t = i18n[st.session_state.lang]
@@ -299,7 +300,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 .user-btn-wrapper button:hover {{ background: #f9f9f9 !important; }}
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
-.masonry {{ column-count: 4; column-gap: 10px; }}
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
 .rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
@@ -486,7 +486,6 @@ def m_health():
         if st.session_state.editing_id: st.caption(f"Editing record id={st.session_state.editing_id}")
 
 def _submit_vote(dish_name: str):
-    """【重构修复版】：点击投票/推荐后，保留缓存并仅清空当前搜索框，不再弹出 KeyError"""
     try:
         exist = supabase.table("dish_ranking").select("*").eq("dish_name", dish_name).execute().data
         if exist:
@@ -498,16 +497,16 @@ def _submit_vote(dish_name: str):
             else:
                 voters.append(st.session_state.user)
                 supabase.table("dish_ranking").update({"votes": record.get("votes", 0) + 1, "voted_by": voters}).eq("id", record.get("id")).execute()
-                st.session_state["_dish_q"] = ""  # 关键修复：成功操作后才清空搜索框
+                st.session_state["_dish_q"] = ""
                 st.rerun()
         else:
             supabase.table("dish_ranking").insert({"dish_name": dish_name, "votes": 1, "voted_by": [st.session_state.user]}).execute()
-            st.session_state["_dish_q"] = ""  # 关键修复：成功操作后才清空搜索框
+            st.session_state["_dish_q"] = ""
             st.rerun()
     except Exception as e:
         st.error(f"DB Error: {e}")
 
-# ---------- 【重构】社区广场：排行榜高度限制 + 解决点击无效 Bug ----------
+# ---------- 【重构】社区广场 ----------
 def m_community():
     rank_col, main_col = st.columns([1.2, 2.8], gap="large")
     
@@ -516,7 +515,6 @@ def m_community():
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).execute().data
         
         if top_dishes:
-            # 【修复高度】: 固定高度为360px，刚好容纳5个菜品，出现优雅的原生滚动条
             with st.container(height=360):
                 for idx, d in enumerate(top_dishes):
                     btn_key = f"hv_rank_{idx}_{d.get('id', 'unk')}"
@@ -530,7 +528,6 @@ def m_community():
         else: 
             st.info(t["no_data"])
 
-        # ----- 将搜索打榜功能移至左侧底部 -----
         st.markdown(f"<div style='font-size:0.95rem; font-weight:700; color:{TEXT_MAIN}; margin:24px 0 10px 0; border-bottom: 1px solid rgba(150,150,150,0.2); padding-bottom:6px;'>🔍 {t['search_ph']}</div>", unsafe_allow_html=True)
         
         if st.session_state.user:
@@ -542,7 +539,6 @@ def m_community():
                     st.session_state["_dish_q"] = q
                     st.rerun()
 
-            # 【关键修复】：不使用 pop，改用 get 保留状态，直到用户主动投票后才清除！
             dish_q = st.session_state.get("_dish_q", None)
             if dish_q:
                 lib = dish_library[st.session_state.lang]
@@ -550,9 +546,8 @@ def m_community():
                 matches = [d for d in lib if dish_clean.lower() in d.lower()]
                 if matches:
                     st.caption(t["guess"])
-                    cols = st.columns(2)  # 适应左侧较窄空间，改为双列布局
+                    cols = st.columns(2)
                     for i, match in enumerate(matches[:4]):
-                        # 确保 key 的绝对唯一性
                         if cols[i % 2].button(match, key=f"match_{i}_{match}", use_container_width=True): _submit_vote(match)
                     if dish_clean not in matches and st.button(t["rec_custom"].format(dish_clean), use_container_width=True, key="rec_cust_1"): _submit_vote(dish_clean)
                 else:
@@ -568,7 +563,7 @@ def m_community():
     with main_col:
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         
-        # ----- 顶部全宽发布大按钮 -----
+        # ---------------- 吸顶：发布动态大按钮 ----------------
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         if st.session_state.user:
             if st.button("➕ " + t["pub"], type="primary", use_container_width=True, key="pure_pub_btn_top"):
@@ -577,35 +572,32 @@ def m_community():
             st.button("🔒 " + t["log_req"], disabled=True, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # ---------------- 右侧纯净原生竖向动态流 ----------------
+        # ---------------- 内滚：原生竖向动态流 ----------------
+        # 引入固定高度容器，实现下方瀑布流独立滚动，不影响上方“发布动态”吸顶
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
         
-        for r in comments_data:
-            with st.container(border=True):
-                # 顶部：用户名 + 标签
-                st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center;'><div><span style='font-weight:bold; font-size:1.1rem; color:{TEXT_MAIN}'>👤 {r.get('user_name','')}</span></div><div style='background:{SAGE_BG}; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; color:{DEEP_GREEN}'>{r.get('tag','')}</div></div>", unsafe_allow_html=True)
-                
-                # 中部：菜名和评论正文
-                st.markdown(f"<div style='font-size:1.3rem; font-weight:bold; margin-top:12px; margin-bottom:6px; color:{TEXT_MAIN}'>🍽️ {r.get('dish_name','')}</div>", unsafe_allow_html=True)
-                if r.get('comment'):
-                    st.markdown(f"<div style='color:{TEXT_MAIN}; opacity:0.95; margin-bottom:12px; line-height:1.6;'>{r.get('comment','')}</div>", unsafe_allow_html=True)
-                
-                # [配图直显]：判断数据库中是否存在 image_data
-                img_data = r.get('image_data')
-                if img_data:
-                    st.markdown(f"<div style='margin-bottom:12px;'><img src='{img_data}' style='width:100%; max-width:400px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);'/></div>", unsafe_allow_html=True)
-                
-                # 底部：单列独立点赞按钮
-                st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid rgba(150,150,150,0.2)'/>", unsafe_allow_html=True)
-                
-                lk = r.get("liked_by") if isinstance(r.get("liked_by"), list) else []
-                has_liked = (st.session_state.user in lk) if st.session_state.user else False
-                
-                # 使用单列左对齐按钮作为点赞互动
-                if st.button(f"👍 {t['like']} ({r.get('likes', 0)})", key=f"like_btn_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
-                    lk.append(st.session_state.user)
-                    supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute()
-                    st.rerun()
+        with st.container(height=650):
+            for r in comments_data:
+                with st.container(border=True):
+                    st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center;'><div><span style='font-weight:bold; font-size:1.1rem; color:{TEXT_MAIN}'>👤 {r.get('user_name','')}</span></div><div style='background:{SAGE_BG}; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; color:{DEEP_GREEN}'>{r.get('tag','')}</div></div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<div style='font-size:1.3rem; font-weight:bold; margin-top:12px; margin-bottom:6px; color:{TEXT_MAIN}'>🍽️ {r.get('dish_name','')}</div>", unsafe_allow_html=True)
+                    if r.get('comment'):
+                        st.markdown(f"<div style='color:{TEXT_MAIN}; opacity:0.95; margin-bottom:12px; line-height:1.6;'>{r.get('comment','')}</div>", unsafe_allow_html=True)
+                    
+                    img_data = r.get('image_data')
+                    if img_data:
+                        st.markdown(f"<div style='margin-bottom:12px;'><img src='{img_data}' style='width:100%; max-width:400px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);'/></div>", unsafe_allow_html=True)
+                    
+                    st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid rgba(150,150,150,0.2)'/>", unsafe_allow_html=True)
+                    
+                    lk = r.get("liked_by") if isinstance(r.get("liked_by"), list) else []
+                    has_liked = (st.session_state.user in lk) if st.session_state.user else False
+                    
+                    if st.button(f"👍 {t['like']} ({r.get('likes', 0)})", key=f"like_btn_{r.get('id', 'temp')}", disabled=(not st.session_state.user or has_liked)):
+                        lk.append(st.session_state.user)
+                        supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute()
+                        st.rerun()
 
 
 # ---------- 8. 对话框组 ----------
@@ -615,14 +607,12 @@ def dlg_publish():
     tag = st.selectbox(t["tag"], tag_opts)
     dish = st.text_input(t["title_in"])
     cont = st.text_area(t["desc_in"])
-    # 增加照片直显提示
     up_img = st.file_uploader("📷 上传美食照片 (可选)", type=["jpg", "png", "jpeg"], key="pubimg")
     
     c1, c2 = st.columns(2)
     if c1.button(t["close"]): st.rerun()
     if c2.button(t["publish"], type="primary") and dish:
         img_b64_str = ""
-        # 捕捉用户上传图片并转化为 Base64
         if up_img:
             b64_data = base64.b64encode(up_img.read()).decode("utf-8")
             img_b64_str = f"data:{up_img.type};base64,{b64_data}"
@@ -637,7 +627,7 @@ def dlg_publish():
                 "liked_by": [], 
                 "tag": tag, 
                 "replies": [],
-                "image_data": img_b64_str # 保存至数据库
+                "image_data": img_b64_str
             }).execute()
             st.rerun()
         except Exception as e: 
@@ -748,7 +738,8 @@ def m_profile():
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
         st.markdown(_profile_avatar_html(st.session_state.user, prof.get("avatar_data")), unsafe_allow_html=True)
-        if st.button("📸 更换头像", use_container_width=True): dlg_avatar()
+        # 修复硬编码：加入双语字典调用
+        if st.button(t.get("change_avatar", "📸 更换头像"), use_container_width=True): dlg_avatar()
 
         default_name = prof.get("profile_name") or st.session_state.user
         nk = f"pn_{st.session_state.user}"
@@ -760,7 +751,8 @@ def m_profile():
         with pw1: st.text_input(t["u_pwd"], value="********", disabled=True)
         with pw2:
             st.markdown("<div style='height:2.4rem'></div>", unsafe_allow_html=True)
-            if st.button("修改" if not pen else " ", key="pwd_edit", type="primary", use_container_width=True): dlg_pw()
+            # 修复硬编码：加入双语字典调用
+            if st.button(t.get("edit_btn", "修改") if not pen else " ", key="pwd_edit", type="primary", use_container_width=True): dlg_pw()
         if st.button(t["out"], type="primary", use_container_width=True, key="logout_profile"):
             st.session_state.user, st.session_state.need_del_cookie, st.session_state.logout_flag, st.session_state.current_page = None, True, True, "Home"; st.rerun()
         if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
