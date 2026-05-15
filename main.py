@@ -1,14 +1,10 @@
 """
-AI Health Ecosystem — Streamlit 网页端 (极致安全 & 平滑升级版)
-核心特性：
-1. [Bug修复] 修复了未登录时点击侧边栏“访客(点击登录)”按钮被 st.rerun() 强制截断导致对话框不弹出的问题。
-2. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制，不影响老用户。
-3. [密码安全] 新密码强制使用 PBKDF2_HMAC + 动态盐值进行 10万次哈希加密。
-4. [防 XSS] 所有用户生成的动态内容在渲染 HTML 前强制通过 html.escape() 转义。
-5. [防越权] 删除/修改操作强制绑定当前会话用户，杜绝抓包篡改他人数据。
-6. [图片安检] 社区配图强制重采样清洗，拦截恶意脚本并限制文件大小。
-7. [防篡改] 带有 HMAC 签名的安全 Cookie。
-8. [极致 UI] 全宽图片 Banner、原生左侧滚动排行榜、右侧吸顶发布按钮与纯净瀑布流。
+AI Health Ecosystem — Streamlit 网页端 (极致安全 & 丝滑流畅版)
+核心优化：
+1. [极致提速] 移除了 Cookie 鉴权时的冗余 st.rerun()，彻底解决双重加载导致的严重卡顿。
+2. [防爆保护] 为社区动态流增加 .limit(30) 限制，防止大量图片拉取导致前端 DOM 渲染崩溃。
+3. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制。
+4. [核心安全] 防 XSS、防越权、防木马（PIL 重采样）、HMAC 签名安全 Cookie 全面保留。
 """
 from __future__ import annotations
 
@@ -51,17 +47,12 @@ def hash_password(password: str, salt: str = None) -> str:
     return f"{salt}${pwd_hash.hex()}"
 
 def verify_password_with_upgrade(stored_password: str, provided_password: str) -> tuple[bool, bool]:
-    """
-    智能密码验证引擎 (支持老用户平滑升级)
-    返回元组: (密码是否正确, 是否需要系统自动升级为哈希)
-    """
-    # 如果密码里没有 $ 符号，说明是遗留的明文密码
+    """智能密码验证引擎 (支持老用户平滑升级)"""
     if "$" not in stored_password:
         if stored_password == provided_password:
-            return True, True  # 密码正确，但需要升级
+            return True, True  
         return False, False
         
-    # 如果是强加密哈希，走标准验证流程
     try:
         salt, _ = stored_password.split('$')
         return stored_password == hash_password(provided_password, salt), False
@@ -84,7 +75,7 @@ def verify_cookie(cookie_value: str) -> str | None:
     return None
 
 def process_safe_image(uploaded_file, max_mb=2, max_dim=800) -> tuple[str | None, str | None]:
-    """图片安全过滤与重采样引擎 (防木马伪装)"""
+    """图片安全过滤与重采样引擎"""
     if not uploaded_file:
         return None, None
     if uploaded_file.size > max_mb * 1024 * 1024:
@@ -210,9 +201,10 @@ raw_cookie = cookie_manager.get(cookie="saved_user")
 if raw_cookie and isinstance(raw_cookie, str) and st.session_state.user is None and not st.session_state.logout_flag:
     verified_user = verify_cookie(raw_cookie)
     if verified_user:
+        # [提速修复点] 直接赋予状态即可，去掉 st.rerun() 杜绝无限渲染卡顿
         st.session_state.user = verified_user
-        st.rerun()
     else:
+        # 非法或旧版 Cookie，强制清除并要求重新登录
         st.session_state.need_del_cookie = True
 
 if st.query_params.get("_home") == "1":
@@ -502,6 +494,7 @@ def m_kitchen():
 
         if st.session_state.get("l_rec") and st.session_state.user and st.button(t["fav"]):
             try:
+                # 防越权
                 supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
                 st.success(t["suc"])
             except Exception as e: st.error(f"DB Error: {e}")
@@ -531,8 +524,9 @@ def m_health():
     left, right = st.columns([1, 2], gap="medium")
     with left:
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
-        logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
+        logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).limit(50).execute().data
         for r in logs_data:
+            # 防 XSS
             safe_b = html.escape(str(r.get('breakfast','')))
             safe_l = html.escape(str(r.get('lunch','')))
             safe_dn = html.escape(str(r.get('dinner','')))
@@ -542,10 +536,11 @@ def m_health():
                 if ce.button(t["edit"], key=f"e_{r.get('id', 'temp')}"): st.session_state.editing_id = r.get("id"); st.rerun()
                 if cd.button(t["del"], key=f"d_{r.get('id', 'temp')}"):
                     try: 
+                        # 防越权
                         supabase.table("diet_logs").delete().eq("id", r.get("id")).eq("username", st.session_state.user).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
-        logs = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date").execute().data
+        logs = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date").limit(50).execute().data
         if logs:
             df = pd.DataFrame(logs)
             df["log_date"] = pd.to_datetime(df["log_date"])
@@ -568,6 +563,7 @@ def m_health():
                 payload = {"username": st.session_state.user, "log_date": str(d), "weight": float(w), "calories": cal, "breakfast": str(b), "lunch": str(l), "dinner": str(dn)}
                 try:
                     if st.session_state.editing_id:
+                        # 防越权
                         supabase.table("diet_logs").update(payload).eq("id", st.session_state.editing_id).eq("username", st.session_state.user).execute()
                         st.session_state.editing_id = None
                     else:
@@ -664,11 +660,13 @@ def m_community():
             st.button("🔒 " + t["log_req"], disabled=True, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
+        # 【提速 & 防爆修复】 增加 .limit(30) 防止数据库爆炸导致前端严重卡顿
+        comments_data = supabase.table("comments").select("*").order("id", desc=True).limit(30).execute().data
         
         with st.container(height=650):
             for r in comments_data:
                 with st.container(border=True):
+                    # 防 XSS
                     safe_u = html.escape(str(r.get('user_name','')))
                     safe_tag = html.escape(str(r.get('tag','')))
                     safe_dish = html.escape(str(r.get('dish_name','')))
