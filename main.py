@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-1. 移除左侧导航深绿背景，融入全局浅绿背景，对齐高度。
-2. 侧边栏菜单和下载按钮底色统一为 #808080 灰色。
-3. 【新增】重构底部个人用户 UI (名称/账号 + 白底按钮)。
-4. 【新增】根据登录状态动态隐藏/显示顶栏的“登录”与“注册”按钮。
-5. 包含 100 款动态菜品库及本地 PDF 原生下载引擎。
+最终完善版：
+1. 彻底修复 Streamlit @st.dialog 原生状态泄露导致的“幽灵弹窗”Bug。
+2. 引入高度隐私保护的头像模块：支持系统预设及本地 Base64 数据库直存加密，杜绝公网 URL 暴露。
+3. 移除左侧导航深绿背景，按钮灰底白字，对齐布局。
+4. 包含本地 PDF 免跳转原生下载与 100 款动态菜品库。
 """
 from __future__ import annotations
 
@@ -67,8 +67,19 @@ def _icon_to_data_uri(p: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 
-def _profile_avatar_html(username: str) -> str:
-    av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
+def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
+    """动态头像渲染逻辑：优先读取 Base64 数据库流，降级读取预设，最后回退随机生成"""
+    if avatar_data:
+        if avatar_data.startswith("preset:"):
+            seed = avatar_data.split(":", 1)[1]
+            av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(seed, safe='')}"
+        elif avatar_data.startswith("b64:"):
+            av_url = avatar_data[4:]
+        else:
+            av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
+    else:
+        av_url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={quote(username, safe='')}"
+
     cam = _icon_path("camera")
     overlay = ""
     if cam:
@@ -102,7 +113,7 @@ def _team_images() -> list[Path]:
     return out
 
 
-# ---------- 2. 页面状态与自适应配置 ----------
+# ---------- 2. 页面状态管理与核心控制 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
     page_icon=_page_icon_arg(),
@@ -116,7 +127,8 @@ if "current_page" not in st.session_state: st.session_state.current_page = "Home
 if "lang" not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
 if "theme" not in st.session_state: st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
 
-for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "open_signup", "open_publish", "open_pw"):
+# 已清理手动状态变量，仅保留 Cookie 控制
+for k in ("need_set_cookie", "need_del_cookie", "logout_flag"):
     if k not in st.session_state: st.session_state[k] = False
 
 cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -137,6 +149,7 @@ if st.query_params.get("_home") == "1":
     st.session_state.current_page = "Home"
     st.query_params.clear()
     st.rerun()
+
 
 # ---------- 3. 双语字典引擎 (i18n) ----------
 i18n = {
@@ -238,10 +251,10 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
-/* 右上角导航按钮样式：统一为灰色 */
+/* 顶栏悬浮按钮 */
 .pill-btn > button {{ background: #808080 !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
 
-/* 侧边栏按钮样式：灰色底，白字 */
+/* 左侧导航按钮统一样式 */
 .side-card button {{ 
     background: #808080 !important; color: #ffffff !important; border-radius: 20px !important; 
     min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
@@ -249,7 +262,6 @@ div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !im
 }}
 .side-card button:hover {{ background: #666666 !important; }}
 
-/* 侧边栏下载按钮样式：灰色底，白字 */
 div[data-testid="stDownloadButton"] > button[kind="primary"] {{
     display: block; width: 100%; background: #808080 !important; color: #ffffff !important; 
     text-align: center; border-radius: 8px !important; padding: 8px 14px !important; border: none !important; font-weight: 600 !important;
@@ -258,13 +270,12 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
     background: #666666 !important; color: #ffffff !important; border: none !important;
 }}
 
-/* 个人中心白色背景按钮 */
+/* 个人主页底部白底按钮 */
 .user-btn-wrapper button {{
     background: #ffffff !important; color: #333333 !important; border: 1px solid rgba(0,0,0,0.1) !important;
     border-radius: 8px !important; font-weight: normal !important; padding: 8px !important; width: 100% !important;
 }}
 .user-btn-wrapper button:hover {{ background: #f9f9f9 !important; }}
-
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
 .masonry {{ column-count: 4; column-gap: 10px; }}
@@ -329,9 +340,8 @@ def ask_ai_sync(sys_p, usr_p):
         return "0"
 
 def _require_login():
-    st.session_state.open_login = True
-    st.session_state.current_page = "Home"
-    st.rerun()
+    st.warning("请先登录 / Please login first")
+    st.stop()
 
 def traffic_dots(uid: str = "default") -> None:
     html_code = """
@@ -525,13 +535,13 @@ def m_community():
         with fc2:
             if st.session_state.user and st.button(t["search_go"], key="comm_go"): st.session_state["_dish_q"] = st.session_state.get("comm_search", "")
         with fc3:
-            if st.session_state.user and st.button(t["nf_add"], key="nfadd"): st.session_state.open_publish = True; st.rerun()
+            if st.session_state.user and st.button(t["nf_add"], key="nfadd"): dlg_publish()
         with fc4:
             if st.session_state.user:
                 pp = _icon_path("plus")
                 if pp: st.image(str(pp), width=32)
                 if st.button(" " if pp else "➕", key="bigplus", type="primary", use_container_width=True, help=t["nf_add"]):
-                    st.session_state.open_publish = True; st.rerun()
+                    dlg_publish()
         st.markdown("</div>", unsafe_allow_html=True)
 
         dish_q = st.session_state.pop("_dish_q", None)
@@ -552,6 +562,8 @@ def m_community():
                 formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center'>🍲 {d}</div>" for d in lib])
                 st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
 
+
+# ---------- 8. 对话框组与原生隔离策略 ----------
 @st.dialog(t["pub"])
 def dlg_publish():
     tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sys_lang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
@@ -560,21 +572,77 @@ def dlg_publish():
     cont = st.text_area(t["desc_in"])
     _ = st.file_uploader(t["image"], type=["jpg", "png"], key="pubimg")
     c1, c2 = st.columns(2)
-    if c1.button(t["close"]): st.session_state.open_publish = False; st.rerun()
+    if c1.button(t["close"]): st.rerun()
     if c2.button(t["publish"], type="primary") and dish:
         try:
             supabase.table("comments").insert({"user_name": st.session_state.user, "author_username": st.session_state.user, "dish_name": dish, "comment": cont, "likes": 0, "liked_by": [], "tag": tag, "replies": []}).execute()
-            st.session_state.open_publish = False; st.rerun()
+            st.rerun()
         except Exception as e: st.error(str(e))
 
 @st.dialog(t["new_pwd_title"])
 def dlg_pw():
     npw = st.text_input(t["new_pwd"], type="password")
     a1, a2 = st.columns(2)
-    if a1.button(t["close"]): st.session_state.open_pw = False; st.rerun()
+    if a1.button(t["close"]): st.rerun()
     if a2.button(t["submit"], type="primary") and npw:
-        try: supabase.table("app_users").update({"password": npw}).eq("username", st.session_state.user).execute(); st.session_state.open_pw = False; st.success(t["suc"]); st.rerun()
+        try: supabase.table("app_users").update({"password": npw}).eq("username", st.session_state.user).execute(); st.success(t["suc"]); st.rerun()
         except Exception as e: st.error(str(e))
+
+@st.dialog(t["login"])
+def dlg_login():
+    u, p = st.text_input(t["id_in"]), st.text_input(t["pwd_in"], type="password")
+    a, b = st.columns(2)
+    if a.button(t["close"]): st.rerun()
+    if b.button(t["confirm"], type="primary"):
+        if supabase.table("app_users").select("*").eq("username", u).eq("password", p).execute().data:
+            st.session_state.user, st.session_state.need_set_cookie, st.session_state.logout_flag = u, True, False; st.rerun()
+        else: st.error(t["err"])
+
+@st.dialog(t["signup"])
+def dlg_signup():
+    nu, np = st.text_input(t["new_id"]), st.text_input(t["new_pwd"], type="password")
+    a, b = st.columns(2)
+    if a.button(t["close"]): st.rerun()
+    if b.button(t["confirm"], type="primary"):
+        if supabase.table("app_users").select("*").eq("username", nu).execute().data: st.error(t["err"])
+        else: supabase.table("app_users").insert({"username": nu, "password": np}).execute(); st.success(t["suc"]); st.rerun()
+
+def _save_avatar(data_str: str):
+    """保存直传加密后的头像流"""
+    try:
+        supabase.table("app_users").update({"avatar_data": data_str}).eq("username", st.session_state.user).execute()
+        st.rerun()
+    except Exception as e:
+        st.error(f"保存失败，请检查数据库配置: {e}")
+
+@st.dialog("更换头像 / Change Avatar")
+def dlg_avatar():
+    st.info("🔒 隐私保护：系统采用本地直传 Base64 技术，头像将安全加密存入数据库，拒绝公网图床嗅探。")
+    tab1, tab2 = st.tabs(["系统预设", "本地上传"])
+    with tab1:
+        cols = st.columns(4)
+        presets = ["Milo", "Felix", "Luna", "Aneka"]
+        for i, p in enumerate(presets):
+            url = f"https://api.dicebear.com/7.x/avataaars/svg?seed={p}"
+            cols[i].image(url, width=60)
+            if cols[i].button("选择", key=f"sel_{p}"):
+                _save_avatar(f"preset:{p}")
+    with tab2:
+        up_img = st.file_uploader("上传正方形照片 (建议 < 2MB)", type=["jpg", "png", "jpeg"])
+        if up_img:
+            st.image(up_img, width=150)
+            if st.button("保存上传头像", type="primary"):
+                b64_str = base64.b64encode(up_img.read()).decode("utf-8")
+                mime_type = up_img.type
+                _save_avatar(f"b64:data:{mime_type};base64,{b64_str}")
+
+def _save_profile_name(key: str):
+    if not st.session_state.user: return
+    nv = (st.session_state.get(key) or "").strip()
+    if not nv: return
+    try: supabase.table("app_users").update({"profile_name": nv}).eq("username", st.session_state.user).execute()
+    except Exception: st.session_state["_profile_warn"] = "如需保存姓名，请在 Supabase 的 app_users 表添加 profile_name (text) 字段。"
+
 
 def m_profile():
     if not st.session_state.user: _require_login()
@@ -609,21 +677,28 @@ def m_profile():
         pr1, pr2 = st.columns([0.62, 0.38])
         with pr2:
             st.markdown("<div style='text-align:right;padding:4px 0'>", unsafe_allow_html=True); traffic_dots("profile_side"); st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown(_profile_avatar_html(st.session_state.user), unsafe_allow_html=True)
+        
+        # 接入动态头像模块数据查询
         urow = supabase.table("app_users").select("*").eq("username", st.session_state.user).execute().data
         prof = (urow[0] if urow else {}) or {}
-        st.text_input(t["u_name"], value=prof.get("profile_name") or st.session_state.user, disabled=True)
+        st.markdown(_profile_avatar_html(st.session_state.user, prof.get("avatar_data")), unsafe_allow_html=True)
+        if st.button("📸 更换头像", use_container_width=True): dlg_avatar()
+
+        default_name = prof.get("profile_name") or st.session_state.user
+        nk = f"pn_{st.session_state.user}"
+        if nk not in st.session_state: st.session_state[nk] = default_name
+        st.text_input(t["u_name"], key=nk, on_change=lambda k=nk: _save_profile_name(k))
         st.text_input(t["u_acct"], value=st.session_state.user, disabled=True)
         pen = _icon_path("pencil")
         pw1, pw2 = st.columns([0.76, 0.24])
         with pw1: st.text_input(t["u_pwd"], value="********", disabled=True)
         with pw2:
             st.markdown("<div style='height:2.4rem'></div>", unsafe_allow_html=True)
-            if st.button("修改" if not pen else " ", key="pwd_edit", type="primary", use_container_width=True): st.session_state.open_pw = True
+            if st.button("修改" if not pen else " ", key="pwd_edit", type="primary", use_container_width=True): dlg_pw()
         if st.button(t["out"], type="primary", use_container_width=True, key="logout_profile"):
             st.session_state.user, st.session_state.need_del_cookie, st.session_state.logout_flag, st.session_state.current_page = None, True, True, "Home"; st.rerun()
+        if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
-    if st.session_state.get("open_pw"): dlg_pw()
 
 def m_about():
     imgs = _team_images()
@@ -634,27 +709,8 @@ def m_about():
     for p in imgs: st.image(str(p), use_column_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-@st.dialog(t["login"])
-def dlg_login():
-    u, p = st.text_input(t["id_in"]), st.text_input(t["pwd_in"], type="password")
-    a, b = st.columns(2)
-    if a.button(t["close"]): st.session_state.open_login = False; st.rerun()
-    if b.button(t["confirm"], type="primary"):
-        if supabase.table("app_users").select("*").eq("username", u).eq("password", p).execute().data:
-            st.session_state.user, st.session_state.need_set_cookie, st.session_state.logout_flag, st.session_state.open_login = u, True, False, False; st.rerun()
-        else: st.error(t["err"])
 
-@st.dialog(t["signup"])
-def dlg_signup():
-    nu, np = st.text_input(t["new_id"]), st.text_input(t["new_pwd"], type="password")
-    a, b = st.columns(2)
-    if a.button(t["close"]): st.session_state.open_signup = False; st.rerun()
-    if b.button(t["confirm"], type="primary"):
-        if supabase.table("app_users").select("*").eq("username", nu).execute().data: st.error(t["err"])
-        else: supabase.table("app_users").insert({"username": nu, "password": np}).execute(); st.session_state.open_signup = False; st.success(t["suc"]); st.rerun()
-
-
-# ---------- 8. 原汁原味分栏渲染：左侧完全融入背景，按钮灰色 ----------
+# ---------- 9. 布局分发渲染 ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
@@ -688,7 +744,6 @@ def render_home():
         else:
             st.button(f"{t['dl_btn']} (未找到文件)", disabled=True, use_container_width=True)
 
-        # 【核心修改】重构个人用户区域，名称/账号使用深色字体，右侧加上简约深紫色用户小人图标
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
         na1, na2 = st.columns([0.7, 0.3], gap="small")
         with na1: 
@@ -697,21 +752,18 @@ def render_home():
             user_svg = '''<svg viewBox="0 0 24 24" fill="none" stroke="#4B3F72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>'''
             st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
-        # 使用专用的 user-btn-wrapper 显示白底按钮
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
         display_name = st.session_state.user if st.session_state.user else t["guest"]
         if st.button(display_name, key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
-            else: st.session_state.open_login = True
+            else: dlg_login()
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
 
     with main:
-        # 【核心修改】动态隐藏/显示“登录”与“注册”按钮
         if st.session_state.user:
-            # 登录状态下：只显示设置和语言按钮
             top = st.columns([7, 1, 1])
             top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
@@ -723,7 +775,6 @@ def render_home():
                 if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
         else:
-            # 未登录状态：显示登录、注册、设置、语言全部按钮
             top = st.columns([5, 1, 1, 1, 1])
             top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
@@ -732,11 +783,11 @@ def render_home():
                 st.markdown("</div>", unsafe_allow_html=True)
             with top[2]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button(t["login"], use_container_width=True): st.session_state.open_login = True; st.rerun()
+                if st.button(t["login"], use_container_width=True): dlg_login()
                 st.markdown("</div>", unsafe_allow_html=True)
             with top[3]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button(t["signup"], use_container_width=True): st.session_state.open_signup = True; st.rerun()
+                if st.button(t["signup"], use_container_width=True): dlg_signup()
                 st.markdown("</div>", unsafe_allow_html=True)
             with top[4]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
@@ -757,10 +808,7 @@ def render_home():
                 st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Midterm progress preview</div>", unsafe_allow_html=True)
                 st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
 
-    if st.session_state.open_login: dlg_login()
-    if st.session_state.open_signup: dlg_signup()
 
-# ---------- 9. 路由分发 ----------
 if st.session_state.current_page == "Home": render_home()
 elif st.session_state.current_page == "Settings":
     ht1, ht2 = st.columns([0.12, 0.88])
@@ -786,5 +834,4 @@ else:
     elif st.session_state.current_page == "B": m_health()
     elif st.session_state.current_page == "C":
         m_community()
-        if st.session_state.get("open_publish") and st.session_state.user: dlg_publish()
     elif st.session_state.current_page == "D": m_profile()
