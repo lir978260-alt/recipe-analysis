@@ -1,10 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-1. 移除左侧导航深绿背景，融入全局浅绿背景。
-2. 侧栏按钮为 #808080 灰色。底部用户 UI 白底清爽卡片，动态隐藏顶栏登录。
-3. AI智能厨房左右模块绝对对齐，并加入了未上传文件/未填文本的【警告提示防呆机制】。
-4. 极简去AI味头像系统（首字母缩写 + 抽象几何预设）。
-5. 支持本地 PDF 原生下载。
+最终升级版：
+1. 移除独立语言按钮，将【语言切换】与【主题配色】统一收纳至“设置(⚙️)”弹窗。
+2. 强绑定 AI 双语系统：根据所选语言，强制大模型以纯中文或纯英文进行输出。
+3. 新增 5 款精美 UI 动态主题色库，支持一键切换全局颜色响应。
+4. 修复了原生 HTML 组件报错，具备完全对称布局及本地 PDF 直传免跳转下载。
 """
 from __future__ import annotations
 
@@ -33,15 +33,12 @@ TEAM_DIR = STATIC / "team"
 ICON_DIR = STATIC / "icon"
 _ICON_EXTS = (".png", ".svg", ".webp", ".ico", ".jpg", ".jpeg")
 
-
 def _icon_path(*names: str) -> Path | None:
-    if not ICON_DIR.is_dir():
-        return None
+    if not ICON_DIR.is_dir(): return None
     for stem in names:
         for ext in _ICON_EXTS:
             p = ICON_DIR / f"{stem}{ext}"
-            if p.is_file():
-                return p.resolve()
+            if p.is_file(): return p.resolve()
     return None
 
 def _page_icon_arg() -> str:
@@ -56,7 +53,6 @@ def _icon_to_data_uri(p: Path) -> str:
     }.get(p.suffix.lower(), "application/octet-stream")
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
-# 极简去AI味头像渲染
 def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
     if avatar_data:
         if avatar_data.startswith("preset:"):
@@ -101,7 +97,7 @@ def _team_images() -> list[Path]:
     return out
 
 
-# ---------- 2. 页面状态管理 ----------
+# ---------- 2. 页面状态与自适应配置 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
     page_icon=_page_icon_arg(),
@@ -113,9 +109,8 @@ for k in ("user", "editing_id"):
     if k not in st.session_state: st.session_state[k] = None
 if "current_page" not in st.session_state: st.session_state.current_page = "Home"
 if "lang" not in st.session_state: st.session_state.lang = "🇨🇳 简体中文"
-if "theme" not in st.session_state: st.session_state.theme = "☁️ 云朵白 (Cloud Light)"
 
-for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "open_signup", "open_publish", "open_pw"):
+for k in ("need_set_cookie", "need_del_cookie", "logout_flag", "open_login", "open_signup"):
     if k not in st.session_state: st.session_state[k] = False
 
 cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -137,42 +132,85 @@ if st.query_params.get("_home") == "1":
     st.query_params.clear()
     st.rerun()
 
-# ---------- 3. 双语字典引擎 (i18n) ----------
+
+# ---------- 3. 动态主题颜色配置库 ----------
+theme_colors = {
+    "🍵 抹茶绿 (Matcha Green)": {
+        "SAGE_BG": "#e6f2e0", "DEEP_GREEN": "#2f4a35", "CREAM": "#f3f0e4", 
+        "CHAT_MAIN_BG": "#c5d4b8", "COMM_RANK_SIDEBAR": "#6b6e6b", 
+        "RANK_CARD_BG": "#d8dcd8", "BTN_BG": "#808080", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#1a1a1a"
+    },
+    "🌊 海洋蓝 (Ocean Blue)": {
+        "SAGE_BG": "#e0f0f5", "DEEP_GREEN": "#154360", "CREAM": "#eaeded", 
+        "CHAT_MAIN_BG": "#a9cce3", "COMM_RANK_SIDEBAR": "#5d6d7e", 
+        "RANK_CARD_BG": "#d4e6f1", "BTN_BG": "#808080", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#1a1a1a"
+    },
+    "🌸 樱花粉 (Sakura Pink)": {
+        "SAGE_BG": "#f9ebea", "DEEP_GREEN": "#641e16", "CREAM": "#f5eef8", 
+        "CHAT_MAIN_BG": "#fadbd8", "COMM_RANK_SIDEBAR": "#a569bd", 
+        "RANK_CARD_BG": "#e8daef", "BTN_BG": "#808080", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#1a1a1a"
+    },
+    "☕ 奶茶棕 (Mocha Brown)": {
+        "SAGE_BG": "#f6ddcc", "DEEP_GREEN": "#4a2311", "CREAM": "#fdf2e9", 
+        "CHAT_MAIN_BG": "#edbb99", "COMM_RANK_SIDEBAR": "#873600", 
+        "RANK_CARD_BG": "#e59866", "BTN_BG": "#808080", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#1a1a1a"
+    },
+    "🌌 极光黑 (Aurora Dark)": {
+        "SAGE_BG": "#1e1e1e", "DEEP_GREEN": "#000000", "CREAM": "#2c3e50", 
+        "CHAT_MAIN_BG": "#34495e", "COMM_RANK_SIDEBAR": "#2c3e50", 
+        "RANK_CARD_BG": "#566573", "BTN_BG": "#5d6d7e", "BTN_TEXT": "#ffffff", "TEXT_MAIN": "#fdfdfe"
+    }
+}
+
+if "theme" not in st.session_state or st.session_state.theme not in theme_colors:
+    st.session_state.theme = "🍵 抹茶绿 (Matcha Green)"
+
+c = theme_colors[st.session_state.theme]
+
+SAGE_BG = c["SAGE_BG"]
+DEEP_GREEN = c["DEEP_GREEN"]
+CREAM = c["CREAM"]
+CHAT_MAIN_BG = c["CHAT_MAIN_BG"]
+COMM_RANK_SIDEBAR = c["COMM_RANK_SIDEBAR"]
+RANK_CARD_BG = c["RANK_CARD_BG"]
+BTN_BG = c["BTN_BG"]
+BTN_TEXT = c["BTN_TEXT"]
+TEXT_MAIN = c["TEXT_MAIN"]
+
+
+# ---------- 4. 双语字典引擎 (i18n) ----------
 i18n = {
     "🇨🇳 简体中文": {
         "sys_lang": "简体中文", "title": "基于大模型的食谱生成和营养分析工具", "login": "登录", "signup": "注册",
-        "language": "语言", "set": "设置", "back": "返回大厅", "m1": "AI 智能厨房\n可视化食谱生成 + 专家问答",
-        "m2": "美食社区\n排行榜 + 交流大厅", "m3": "数据管理\n数据记录 + 热量计算", "c_t": "🏘️ 美食广场社区",
+        "set": "设置", "m1": "AI 智能厨房\n视觉食谱生成 + 专家问答", "m2": "美食社区\n排行榜 + 交流大厅", "m3": "数据管理\n数据记录 + 热量计算",
         "dl_hint": "如果你需要获取更多个性化的食谱……", "dl_btn": "点击这里下载 PDF", "name_l": "名称", "acct_l": "账号",
-        "k_t": "☁️ AI 智能后厨", "k_t1": "📸 看图出菜谱", "k_t2": "💬 营养师问答", "vdg": "视觉食谱生成",
+        "k_t": "☁️ AI 智能后厨", "vdg": "视觉食谱生成",
         "vdg_help": "你可以直接上传食材照片，在输入框中填写口味偏好与烹饪限制。AI 会结合食材清单与要求生成菜品。你也可以收藏喜欢的菜品。",
         "eqa": "专家问答", "eqa_help": "你可以用文字或「文字+图片」提出健康相关问题，AI 将以营养师角色作答。",
         "up": "上传食材照片", "req": "附加要求（可选）", "gen": "生成菜谱", "fav": "⭐️ 收藏此篇", "ask": "具体问题描述",
-        "up_opt": "上传参考图片（可选）", "think": "数据传输中...", "h_t": "📈 健康数据管家", "h_hist": "历史记录",
+        "up_opt": "上传参考图片（可选）", "think": "数据处理中...", "h_t": "📈 健康数据管家", "h_hist": "历史记录",
         "h_banner": "使用数据管理记录个人信息，并计算三餐热量。", "h_chart": "趋势图", "h_t1": "📝 数据录入", "h_t2": "📊 分析报告",
         "d": "选择日期", "w": "体重 (kg)", "b": "早餐记录", "l": "午餐记录", "dn": "晚餐记录", "sub": "提交并计算热量",
         "del": "删除", "edit": "修改", "c_rank": "排行榜", "c_t2": "帖子互动", "c_hall": "交流大厅 — 欢迎分享你想分享的一切",
         "search_ph": "搜索", "search_go": "搜索", "nf_add": "没找到？去发布 →", "pub": "发布动态", "like": "赞",
         "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容", "log_req": "⚠️ 请先登录", "u_t": "👤 我的主页",
         "u_post": "POST", "u_hist": "HISTORY", "u_name": "Name", "u_acct": "Account", "u_pwd": "Password", "pwd_edit": "修改密码",
-        "new_pwd_title": "NEW PASSWORD", "submit": "Submit", "close": "关闭", "err": "账号或密码错误", "suc": "操作成功",
+        "new_pwd_title": "NEW PASSWORD", "submit": "保存提交", "close": "关闭", "err": "账号或密码错误", "suc": "操作成功",
         "out": "退出登录", "reg": "注册新号", "no_data": "暂无数据", "id_in": "输入账号", "pwd_in": "输入密码", "new_id": "设置新账号",
         "new_pwd": "设置新密码", "confirm": "确认", "unfav": "🤍 取消收藏", "del_post": "🗑️ 删除此贴", "reply": "💬 回复",
-        "reply_ph": "写下回复...", "send": "发送", "rec_dish": "🍲 推荐神仙菜品", "rec_ph": "输入菜名并回车进行搜索...",
-        "voted": "⚠️ 你已经给这道菜投过票啦！", "votes": "票", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):",
-        "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
-        "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)"
+        "reply_ph": "写下回复...", "send": "发送", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
+        "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)",
+        "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票"
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
-        "language": "Language", "set": "Settings", "back": "Back to Home", "m1": "AI Smart Kitchen\nVisual Dish Generation + Expert Q&A",
-        "m2": "Community\nRanking List + Chat Hall", "m3": "Data Manager\nRecord Data + Calculate Calories", "c_t": "🏘️ Community Square",
+        "set": "Settings", "m1": "AI Smart Kitchen\nVisual Dish Gen + Expert Q&A", "m2": "Community\nRanking List + Chat Hall", "m3": "Data Manager\nRecord Data + Calories",
         "dl_hint": "If you need to download more recipe resources for personalized needs...", "dl_btn": "Download PDF", "name_l": "Name", "acct_l": "Account",
-        "k_t": "☁️ AI Kitchen", "k_t1": "📸 Image to Recipe", "k_t2": "💬 Dietitian Q&A", "vdg": "Visual Dish Generation",
+        "k_t": "☁️ AI Kitchen", "vdg": "Visual Dish Generation",
         "vdg_help": "Upload photos of ingredients and fill taste preferences and cooking restrictions. The AI generates dishes from ingredients and your needs. You can also collect favorites.",
         "eqa": "Expert Q&A", "eqa_help": "Ask health-related questions in text or text with pictures. The AI answers as a nutritionist.",
         "up": "Upload ingredient photos", "req": "Additional Requirements (Optional)", "gen": "Generate recipes", "fav": "⭐️ Save Recipe", "ask": "Specific problem description",
-        "up_opt": "Upload reference photos (Optional)", "think": "Transmitting data...", "h_t": "📈 Health Data Manager", "h_hist": "History record",
+        "up_opt": "Upload reference photos (Optional)", "think": "Processing data...", "h_t": "📈 Health Data Manager", "h_hist": "History record",
         "h_banner": "Just use this Data Manager to help you to Record Personal Data and Calculate Three-Meal Calories!", "h_chart": "Charts", "h_t1": "📝 Data Entry", "h_t2": "📊 Analytics",
         "d": "Date", "w": "Weight (kg)", "b": "Breakfast", "l": "Lunch", "dn": "Dinner", "sub": "Submit",
         "del": "Delete", "edit": "Edit", "c_rank": "Ranking List", "c_t2": "Discussion", "c_hall": "CHAT HALL — WELCOME TO SHARE WHATEVER YOU LIKE",
@@ -182,15 +220,13 @@ i18n = {
         "new_pwd_title": "NEW PASSWORD", "submit": "Submit", "close": "Close", "err": "Invalid credentials", "suc": "Success",
         "out": "Logout", "reg": "Register", "no_data": "No data available", "id_in": "Enter ID", "pwd_in": "Enter Password", "new_id": "Create ID",
         "new_pwd": "Create Password", "confirm": "Confirm", "unfav": "🤍 Unfavorite", "del_post": "🗑️ Delete Post", "reply": "💬 Reply",
-        "reply_ph": "Write a reply...", "send": "Send", "rec_dish": "🍲 Recommend a Dish", "rec_ph": "Type dish name and press Enter...",
-        "voted": "⚠️ You already voted for this dish!", "votes": "votes", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):",
-        "no_match": "🔍 Not in library. Click below to recommend:", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
-        "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)"
+        "reply_ph": "Write a reply...", "send": "Send", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
+        "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)",
+        "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes"
     },
 }
 t = i18n[st.session_state.lang]
 
-# ---------- 4. 100款动态菜品库 ----------
 dish_library = {
     "🇨🇳 简体中文": [
         "西红柿炒鸡蛋", "西红柿牛腩", "宫保鸡丁", "红烧肉", "清蒸鲈鱼", "麻婆豆腐", "青椒肉丝", "糖醋排骨", "蒜蓉西兰花", "酸菜鱼",
@@ -220,41 +256,34 @@ dish_library = {
     ],
 }
 
-# ---------- 5. 核心样式与 CSS ----------
-SAGE_BG = "#e6f2e0"
-DEEP_GREEN = "#2f4a35"
-CREAM = "#f3f0e4"
-CHAT_MAIN_BG = "#c5d4b8"
-COMM_RANK_SIDEBAR = "#6b6e6b"
-RANK_CARD_BG = "#d8dcd8"
 
+# ---------- 5. 动态响应全局 CSS ----------
 st.markdown(
     f"""
 <style>
 header[data-testid="stHeader"], footer {{ visibility: hidden !important; height: 0 !important; }}
-.stApp {{ background: {SAGE_BG} !important; }}
+.stApp {{ background: {SAGE_BG} !important; color: {TEXT_MAIN} !important; }}
 .block-container {{ max-width: 1280px !important; padding-top: 2rem !important; }}
 
 div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
 
 /* 顶栏悬浮按钮 */
-.pill-btn > button {{ background: #808080 !important; color: #fff !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
+.pill-btn > button {{ background: {BTN_BG} !important; color: {BTN_TEXT} !important; border-radius: 999px !important; border: none !important; padding: 0.35rem 0.9rem !important; }}
+.pill-btn > button:hover {{ filter: brightness(0.9) !important; }}
 
 /* 左侧导航按钮统一样式 */
 .side-card button {{ 
-    background: #808080 !important; color: #ffffff !important; border-radius: 20px !important; 
+    background: {BTN_BG} !important; color: {BTN_TEXT} !important; border-radius: 20px !important; 
     min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
-    border: 2px solid #ffffff !important; font-weight: bold !important; margin-bottom: 15px !important; 
+    border: 2px solid {BTN_TEXT} !important; font-weight: bold !important; margin-bottom: 15px !important; 
 }}
-.side-card button:hover {{ background: #666666 !important; }}
+.side-card button:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
 
 div[data-testid="stDownloadButton"] > button[kind="primary"] {{
-    display: block; width: 100%; background: #808080 !important; color: #ffffff !important; 
+    display: block; width: 100%; background: {BTN_BG} !important; color: {BTN_TEXT} !important; 
     text-align: center; border-radius: 8px !important; padding: 8px 14px !important; border: none !important; font-weight: 600 !important;
 }}
-div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
-    background: #666666 !important; color: #ffffff !important; border: none !important;
-}}
+div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
 
 /* 个人主页底部白底按钮 */
 .user-btn-wrapper button {{
@@ -266,16 +295,17 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
 .masonry {{ column-count: 4; column-gap: 10px; }}
 @media (max-width: 1100px) {{ .masonry {{ column-count: 2; }} }}
-.card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); }}
-.rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; }}
+.card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
+.rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
-.chart-box {{ background: #5a5a5a; border-radius: 12px; padding: 8px; min-height: 220px; }}
+.chart-box {{ background: {COMM_RANK_SIDEBAR}; border-radius: 12px; padding: 8px; min-height: 220px; }}
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
 </style>
 """,
     unsafe_allow_html=True,
 )
+
 
 # ---------- 6. 数据库与 AI 接口 ----------
 @st.cache_resource
@@ -288,8 +318,13 @@ except Exception:
     st.error("Database connection failed.")
     st.stop()
 
+
 def ask_ai_stream(sys_p, usr_p, img=None):
-    usr_p += f"\n\n[CRITICAL INSTRUCTION: You must strictly output your entire response in {t['sys_lang']}! Do not use any other language.]"
+    # 强制大模型双语隔离核心指令
+    lang_inst = "简体中文 (Simplified Chinese)" if t["sys_lang"] == "简体中文" else "English"
+    sys_p = f"{sys_p}\n\nYou MUST strictly communicate in {lang_inst}."
+    usr_p += f"\n\n[CRITICAL SYSTEM INSTRUCTION: You MUST output your ENTIRE response strictly in {lang_inst}. NO OTHER LANGUAGES ARE ALLOWED!]"
+    
     model = "qwen-vl-plus" if img else "qwen-plus"
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     h = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -314,6 +349,10 @@ def ask_ai_stream(sys_p, usr_p, img=None):
         yield f"\n\nAI Network Error: {str(e)}"
 
 def ask_ai_sync(sys_p, usr_p):
+    lang_inst = "简体中文 (Simplified Chinese)" if t["sys_lang"] == "简体中文" else "English"
+    sys_p = f"{sys_p}\n\nYou MUST strictly communicate in {lang_inst}."
+    usr_p += f"\n\n[CRITICAL SYSTEM INSTRUCTION: You MUST answer strictly in {lang_inst} only.]"
+
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     h = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {"model": "qwen-plus", "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": usr_p}]}
@@ -334,7 +373,6 @@ def _require_login():
 def m_kitchen():
     L, R = st.columns(2, gap="large")
     desc_style = f"background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;height:120px;box-sizing:border-box;overflow-y:auto;margin-bottom:15px;"
-    
     red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
 
     with L:
@@ -398,7 +436,7 @@ def m_health():
     
     left, right = st.columns([1, 2], gap="medium")
     with left:
-        st.markdown(f"**{t['h_hist']}**")
+        st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
         for r in logs_data:
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
@@ -467,7 +505,7 @@ def m_community():
         if top_dishes:
             for d in top_dishes:
                 row_l, row_r = st.columns([0.78, 0.22], gap="small")
-                with row_l: st.markdown(f"<div class='rank-row' style='background:{RANK_CARD_BG};color:#1a1a1a;border:1px solid rgba(0,0,0,.08)'><span><b>{d['dish_name']}</b> — {d['votes']} {t['votes']}</span></div>", unsafe_allow_html=True)
+                with row_l: st.markdown(f"<div class='rank-row'><span><b>{d['dish_name']}</b> — {d['votes']} {t['votes']}</span></div>", unsafe_allow_html=True)
                 with row_r:
                     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                     hp = _icon_path("heart")
@@ -485,7 +523,7 @@ def m_community():
         parts.append("</div></div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
 
-        st.markdown(f"**{t['c_t2']}**")
+        st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['c_t2']}**</div>", unsafe_allow_html=True)
         for r in comments_data:
             with st.container(border=True):
                 st.write(f"**{r['user_name']}** | 🏷️ {r['tag']}\n### {r['dish_name']}\n{r['comment']}")
@@ -546,11 +584,11 @@ def m_community():
                 st.caption(t["no_match"])
                 if st.button(t["rec_custom"].format(dish_clean), key="rec_cust", use_container_width=True): _submit_vote(dish_clean)
             with st.expander(t["view_lib"]):
-                formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center'>🍲 {d}</div>" for d in lib])
+                formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center;color:#1a1a1a;'>🍲 {d}</div>" for d in lib])
                 st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
 
-# ---------- 8. 对话框组与原生隔离策略 ----------
-@st.dialog(t["pub"])
+# ---------- 8. 对话框组 ----------
+@st.dialog("📝 发布 / Publish")
 def dlg_publish():
     tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sys_lang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
     tag = st.selectbox(t["tag"], tag_opts)
@@ -565,7 +603,7 @@ def dlg_publish():
             st.rerun()
         except Exception as e: st.error(str(e))
 
-@st.dialog(t["new_pwd_title"])
+@st.dialog("🔑 修改密码 / Change Password")
 def dlg_pw():
     npw = st.text_input(t["new_pwd"], type="password")
     a1, a2 = st.columns(2)
@@ -574,7 +612,17 @@ def dlg_pw():
         try: supabase.table("app_users").update({"password": npw}).eq("username", st.session_state.user).execute(); st.success(t["suc"]); st.rerun()
         except Exception as e: st.error(str(e))
 
-@st.dialog(t["login"])
+@st.dialog("⚙️ 网站设置 / App Settings")
+def dlg_settings():
+    new_th = st.selectbox(t["theme_sel"], list(theme_colors.keys()), index=list(theme_colors.keys()).index(st.session_state.theme))
+    new_la = st.selectbox(t["lang_sel"], ["🇨🇳 简体中文", "🇬🇧 English"], index=["🇨🇳 简体中文", "🇬🇧 English"].index(st.session_state.lang))
+    
+    if st.button(t["submit"], type="primary", use_container_width=True):
+        st.session_state.theme = new_th
+        st.session_state.lang = new_la
+        st.rerun()
+
+@st.dialog("🔑 账号登录 / User Login")
 def dlg_login():
     u, p = st.text_input(t["id_in"]), st.text_input(t["pwd_in"], type="password")
     a, b = st.columns(2)
@@ -584,7 +632,7 @@ def dlg_login():
             st.session_state.user, st.session_state.need_set_cookie, st.session_state.logout_flag = u, True, False; st.rerun()
         else: st.error(t["err"])
 
-@st.dialog(t["signup"])
+@st.dialog("✨ 注册新号 / User Signup")
 def dlg_signup():
     nu, np = st.text_input(t["new_id"]), st.text_input(t["new_pwd"], type="password")
     a, b = st.columns(2)
@@ -597,12 +645,11 @@ def _save_avatar(data_str: str):
     try:
         supabase.table("app_users").update({"avatar_data": data_str}).eq("username", st.session_state.user).execute()
         st.rerun()
-    except Exception as e:
-        st.error(f"保存失败: {e}")
+    except Exception as e: st.error(f"保存失败: {e}")
 
 @st.dialog("更换头像 / Change Avatar")
 def dlg_avatar():
-    st.info("🔒 系统采用本地直传 Base64 技术，头像将加密存入数据库。")
+    st.info("🔒 您的头像将经过安全加密处理，拒绝公网暴露。")
     tab1, tab2 = st.tabs(["系统预设", "本地上传"])
     with tab1:
         cols = st.columns(4)
@@ -610,23 +657,21 @@ def dlg_avatar():
         for i, p in enumerate(presets):
             url = f"https://api.dicebear.com/7.x/shapes/svg?seed={p}&backgroundColor=e6f2e0,c5d4b8"
             cols[i].image(url, width=60)
-            if cols[i].button("选择", key=f"sel_{p}"):
-                _save_avatar(f"preset:{p}")
+            if cols[i].button("选择", key=f"sel_{p}"): _save_avatar(f"preset:{p}")
     with tab2:
         up_img = st.file_uploader("上传正方形照片 (建议 < 2MB)", type=["jpg", "png", "jpeg"])
         if up_img:
             st.image(up_img, width=150)
             if st.button("保存上传头像", type="primary"):
                 b64_str = base64.b64encode(up_img.read()).decode("utf-8")
-                mime_type = up_img.type
-                _save_avatar(f"b64:data:{mime_type};base64,{b64_str}")
+                _save_avatar(f"b64:data:{up_img.type};base64,{b64_str}")
 
 def _save_profile_name(key: str):
     if not st.session_state.user: return
     nv = (st.session_state.get(key) or "").strip()
     if not nv: return
     try: supabase.table("app_users").update({"profile_name": nv}).eq("username", st.session_state.user).execute()
-    except Exception: st.session_state["_profile_warn"] = "如需保存姓名，请在 Supabase 的 app_users 表添加 profile_name (text) 字段。"
+    except Exception: st.session_state["_profile_warn"] = "需在 app_users 添加 profile_name 字段。"
 
 
 def m_profile():
@@ -693,15 +738,6 @@ def m_profile():
         if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
 
-def m_about():
-    imgs = _team_images()
-    if not imgs:
-        st.warning("未找到 static/team 图片。")
-        return
-    st.markdown("<div style='max-height:88vh;overflow-y:auto;padding-right:8px'>", unsafe_allow_html=True)
-    for p in imgs: st.image(str(p), use_column_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 # ---------- 9. 布局分发渲染 ----------
 def render_home():
@@ -717,7 +753,7 @@ def render_home():
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown(f"<div style='color:#1a1a1a;margin:12px 0 6px 0;font-size:0.95rem;font-weight:600'>{t['dl_hint']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{TEXT_MAIN};margin:12px 0 6px 0;font-size:0.95rem;font-weight:600'>{t['dl_hint']}</div>", unsafe_allow_html=True)
         
         pdf_path = None
         for file in ROOT.rglob("*.pdf"):
@@ -740,9 +776,9 @@ def render_home():
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
         na1, na2 = st.columns([0.7, 0.3], gap="small")
         with na1: 
-            st.markdown(f"<div style='color:#1a1a1a;padding-top:10px;font-weight:bold;font-size:1.05rem;'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{TEXT_MAIN};padding-top:10px;font-weight:bold;font-size:1.05rem;'>{t['name_l']} / {t['acct_l']}</div>", unsafe_allow_html=True)
         with na2: 
-            user_svg = '''<svg viewBox="0 0 24 24" fill="none" stroke="#4B3F72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>'''
+            user_svg = f'''<svg viewBox="0 0 24 24" fill="none" stroke="{TEXT_MAIN}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>'''
             st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
@@ -752,27 +788,23 @@ def render_home():
             else: dlg_login()
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-        
         st.markdown("</div>", unsafe_allow_html=True)
 
     with main:
+        # 顶栏导航极简化：登录前后统一采用齿轮弹窗
         if st.session_state.user:
-            top = st.columns([7, 1, 1])
-            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
+            top = st.columns([8, 1])
+            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;color:{TEXT_MAIN};font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-            with top[2]:
-                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
+                if st.button("⚙️ " + t["set"], key="home_set", use_container_width=True): dlg_settings()
                 st.markdown("</div>", unsafe_allow_html=True)
         else:
-            top = st.columns([5, 1, 1, 1, 1])
-            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
+            top = st.columns([6, 1, 1, 1])
+            top[0].markdown(f"<h2 style='margin:0;padding-top:6px;color:{TEXT_MAIN};font-family:Georgia,\"Times New Roman\",serif;font-weight:700'>{t['title']}</h2>", unsafe_allow_html=True)
             with top[1]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button("⚙️", key="home_set", help=t["set"]): st.session_state.current_page = "Settings"; st.rerun()
+                if st.button("⚙️ " + t["set"], key="home_set", use_container_width=True): dlg_settings()
                 st.markdown("</div>", unsafe_allow_html=True)
             with top[2]:
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
@@ -782,17 +814,13 @@ def render_home():
                 st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
                 if st.button(t["signup"], use_container_width=True): dlg_signup()
                 st.markdown("</div>", unsafe_allow_html=True)
-            with top[4]:
-                st.markdown('<div class="pill-btn">', unsafe_allow_html=True)
-                if st.button(t["language"], use_container_width=True): st.session_state.lang = "🇨🇳 简体中文" if st.session_state.lang == "🇬🇧 English" else "🇬🇧 English"; st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
 
-        st.caption("Group3 / Product Owner: TrungHieu Le")
+        st.caption(f"<span style='color:{TEXT_MAIN};'>Group3 / Product Owner: TrungHieu Le</span>", unsafe_allow_html=True)
 
         c0, c1, c2 = st.columns([1, 2, 1])
         with c1:
             if st.button(t["about"], use_container_width=True): st.session_state.current_page = "About"; st.rerun()
-            st.caption("Scrollable long page uses static/team: team, time1, time2")
+            st.caption(f"<span style='color:{TEXT_MAIN};'>Scrollable long page uses static/team: team, time1, time2</span>", unsafe_allow_html=True)
 
             with st.container(border=True):
                 w1, w2 = st.columns([0.14, 0.86])
@@ -804,26 +832,12 @@ def render_home():
                             <span style="width:12px;height:12px;border-radius:50%;background:#28c840;display:inline-block;"></span>
                         </div>
                     """, unsafe_allow_html=True)
-                with w2: st.markdown("<div style='padding-top:2px;color:#333;font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
+                with w2: st.markdown(f"<div style='padding-top:2px;color:{TEXT_MAIN};font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
                 st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Midterm progress preview</div>", unsafe_allow_html=True)
                 st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
 
+
 if st.session_state.current_page == "Home": render_home()
-elif st.session_state.current_page == "Settings":
-    ht1, ht2 = st.columns([0.12, 0.88])
-    red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
-    with ht1: st.markdown(f"<div style='padding-top:8px'><div style='display:flex; gap:7px;'><button onclick=\"{red_btn_js}\" style='width:12px;height:12px;border-radius:50%;background:#ff5f57;border:0.5px solid rgba(0,0,0,.22);cursor:pointer;'></button><span style='width:12px;height:12px;border-radius:50%;background:#febc2e;'></span><span style='width:12px;height:12px;border-radius:50%;background:#28c840;'></span></div></div>", unsafe_allow_html=True)
-    with ht2: st.markdown(f"### {t['set']}")
-    st.markdown("---")
-    col_t, col_l = st.columns(2)
-    with col_t:
-        theme_opts = list(theme_colors.keys())
-        new_th = st.selectbox("Theme / 主题", theme_opts, index=theme_opts.index(st.session_state.theme))
-        if new_th != st.session_state.theme: st.session_state.theme = new_th; st.rerun()
-    with col_l:
-        lang_opts = ["🇨🇳 简体中文", "🇬🇧 English"]
-        new_la = st.selectbox("Language / 语言", lang_opts, index=lang_opts.index(st.session_state.lang))
-        if new_la != st.session_state.lang: st.session_state.lang = new_la; st.rerun()
 elif st.session_state.current_page == "About":
     u1, u2 = st.columns([0.12, 0.88])
     red_btn_js = "(function(){var u=new URL(window.parent.location.href);u.searchParams.set('_home','1');window.parent.location.href=u.toString();})()"
@@ -833,6 +847,5 @@ elif st.session_state.current_page == "About":
 else:
     if st.session_state.current_page == "A": m_kitchen()
     elif st.session_state.current_page == "B": m_health()
-    elif st.session_state.current_page == "C":
-        m_community()
+    elif st.session_state.current_page == "C": m_community()
     elif st.session_state.current_page == "D": m_profile()
