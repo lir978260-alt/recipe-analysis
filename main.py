@@ -1,10 +1,11 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 彻底移除了所有无用的“红黄绿”窗口按钮。
-2. 删除了“极光黑”主题，保留四款浅色/护眼主题。
-3. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
-4. 首页“关于项目”模块剔除了多余占位符和文字，仅保留纯净的卡片图片展示。
+1. 修复了健康数据页面折线图上方出现多余灰色空白框的渲染 Bug。
+2. 彻底移除了所有无用的“红黄绿”窗口按钮。
+3. 删除了“极光黑”主题，保留四款浅色/护眼主题。
+4. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
+5. 修复了窄屏下设置按钮换行的 Bug，并具备轻量级自适应（Responsive UI）。
 """
 from __future__ import annotations
 
@@ -299,7 +300,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
 .rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
-.chart-box {{ background: {COMM_RANK_SIDEBAR}; border-radius: 12px; padding: 8px; min-height: 220px; }}
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
 
@@ -453,7 +453,6 @@ def m_health():
                     try: supabase.table("diet_logs").delete().eq("id", r.get("id")).execute(); st.rerun()
                     except Exception as e: st.error(str(e))
     with right:
-        st.markdown(f"<div class='chart-box'>", unsafe_allow_html=True)
         logs = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date").execute().data
         if logs:
             df = pd.DataFrame(logs)
@@ -462,7 +461,6 @@ def m_health():
             st.line_chart(df[["weight", "calories"]])
         else:
             st.caption(t["no_data"])
-        st.markdown("</div>", unsafe_allow_html=True)
 
         with st.form("d_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
