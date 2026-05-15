@@ -1,9 +1,10 @@
 """
 AI Health Ecosystem — Streamlit 网页端
-防弹加固版：
-1. 修复 Cookie 管理器针对新访客返回非字符串类型导致的 TypeError 崩溃。
-2. 全局替换强字典索引 ['id'] 为 .get('id')，防止 Supabase 表结构差异导致的 KeyError 崩溃。
-3. 保留了极简 UI、PDF 下载、动态双语、动态主题和无公网暴露的头像 Base64 直存机制。
+最新优化版：
+1. 彻底移除了所有无用的“红黄绿”窗口按钮。
+2. 删除了“极光黑”主题，保留四款浅色/护眼主题。
+3. 全局引入 `top_back_btn()`，所有子功能页面统一在左上角提供【⬅️ 返回大厅】按钮。
+4. 首页“关于项目”模块剔除了多余占位符和文字，仅保留纯净的卡片图片展示。
 """
 from __future__ import annotations
 
@@ -122,7 +123,6 @@ if st.session_state.need_del_cookie:
     st.session_state.need_del_cookie = False
 
 saved_user = cookie_manager.get(cookie="saved_user")
-# 【防弹防御】强制判断 saved_user 必须是字符串，防止新用户初始化时返回 True 等杂数据
 if saved_user and isinstance(saved_user, str) and st.session_state.user is None and not st.session_state.logout_flag:
     st.session_state.user = saved_user
     st.rerun()
@@ -445,7 +445,6 @@ def m_health():
         st.markdown(f"<div style='color:{TEXT_MAIN}'>**{t['h_hist']}**</div>", unsafe_allow_html=True)
         logs_data = supabase.table("diet_logs").select("*").eq("username", st.session_state.user).order("log_date", desc=True).execute().data
         for r in logs_data:
-            # 防弹处理：使用 .get('id')
             with st.expander(f"{r['log_date']} | {r['weight']}kg | {r['calories']}kcal"):
                 st.write(f"{t['b']}:{r.get('breakfast','')} {t['l']}:{r.get('lunch','')} {t['dn']}:{r.get('dinner','')}")
                 ce, cd = st.columns(2)
@@ -511,7 +510,6 @@ def m_community():
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
         if top_dishes:
             for d in top_dishes:
-                # 防弹处理：使用 d.get('id', d.get('dish_name'))，防止别人没建 id 列导致 KeyError
                 btn_key = f"hv_{d.get('id', d.get('dish_name', 'default'))}"
                 row_l, row_r = st.columns([0.78, 0.22], gap="small")
                 with row_l: st.markdown(f"<div class='rank-row'><span><b>{d.get('dish_name','')}</b> — {d.get('votes',0)} {t['votes']}</span></div>", unsafe_allow_html=True)
@@ -779,7 +777,6 @@ def render_home():
             st.markdown(f"<div style='width:36px;height:36px;float:right;'>{user_svg}</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="user-btn-wrapper">', unsafe_allow_html=True)
-        # 【防弹处理】强制将内容转换为字符串 str()，防止 Streamlit 解析布尔值报错
         display_name = str(st.session_state.user) if st.session_state.user else str(t["guest"])
         if st.button(display_name, key="side_user", use_container_width=True):
             if st.session_state.user: st.session_state.current_page = "D"
@@ -817,14 +814,8 @@ def render_home():
         c0, c1, c2 = st.columns([1, 2, 1])
         with c1:
             if st.button(t["about"], use_container_width=True): st.session_state.current_page = "About"; st.rerun()
-            st.caption(f"<span style='color:{TEXT_MAIN};'>Scrollable long page uses static/team: team, time1, time2</span>", unsafe_allow_html=True)
 
             with st.container(border=True):
-                w1, w2 = st.columns([0.14, 0.86])
-                with w1: 
-                    st.markdown("<div style='font-size:1.5rem;text-align:center;'>📄</div>", unsafe_allow_html=True)
-                with w2: st.markdown(f"<div style='padding-top:2px;color:{TEXT_MAIN};font-size:0.85rem;font-weight:600'>ABOUT OUR PROJECT · Recipe Nutrition Generator</div>", unsafe_allow_html=True)
-                
                 about_img = ROOT / "about.jpg"
                 if not about_img.is_file():
                     about_img = STATIC / "about.jpg"
@@ -833,9 +824,6 @@ def render_home():
                     st.image(str(about_img), use_column_width=True)
                 else:
                     st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:110px;border-radius:10px;margin:10px 0 8px 0;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:12px;letter-spacing:.04em'>Please place about.jpg in the directory</div>", unsafe_allow_html=True)
-                    
-                st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div><div style='flex:1;min-width:120px;height:38px;background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.12)'></div></div>", unsafe_allow_html=True)
-
 
 # ---------- 10. 路由分发渲染 ----------
 def m_about():
