@@ -1,10 +1,11 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 修复了字典键值丢失导致的 KeyError Bug（补回了 c_vote 等字段）。
-2. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的高级瀑布流 (Masonry) 展示。
-3. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
-4. 全局引入 top_back_btn()，所有子功能页面统一提供【⬅️ 返回大厅】按钮。
+1. 社区页面深度重构：搜索打榜功能完美左移，自适应窄列空间。
+2. 右侧交流大厅彻底极简化：删除所有列表评论，仅保留纯净瀑布流与全宽发布按钮。
+3. 使用“空气墙”间距（gap="large"）实现功能区视觉无形分割。
+4. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
+5. 全局引入 top_back_btn()，所有子功能页面统一提供【⬅️ 返回大厅】按钮。
 """
 from __future__ import annotations
 
@@ -84,6 +85,7 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
     )
 
 def _team_images() -> list[Path]:
+    """升级版扫描引擎：兼容读取 group.png, team.png, time1.jpg, time2.jpg"""
     out: list[Path] = []
     for base in ("group", "team", "time1", "time2"):
         hit = None
@@ -189,7 +191,7 @@ i18n = {
         "h_banner": "使用数据管理记录个人信息，并计算三餐热量。", "h_chart": "趋势图", "h_t1": "📝 数据录入", "h_t2": "📊 分析报告",
         "d": "选择日期", "w": "体重 (kg)", "b": "早餐记录", "l": "午餐记录", "dn": "晚餐记录", "sub": "提交并计算热量",
         "del": "删除", "edit": "修改", "c_rank": "排行榜", "c_t2": "帖子互动", "c_hall": "交流大厅 — 欢迎分享你想分享的一切",
-        "search_ph": "搜索", "search_go": "搜索", "nf_add": "没找到？去发布 →", "pub": "发布动态", "like": "赞",
+        "search_ph": "搜索与打榜", "search_go": "搜索", "nf_add": "去发布", "pub": "发布动态", "like": "赞",
         "tag": "选择标签", "title_in": "输入标题", "desc_in": "输入内容", "log_req": "⚠️ 请先登录", "u_t": "👤 我的主页",
         "u_post": "POST", "u_hist": "HISTORY", "u_name": "Name", "u_acct": "Account", "u_pwd": "Password", "pwd_edit": "修改密码",
         "new_pwd_title": "NEW PASSWORD", "submit": "保存提交", "close": "关闭", "err": "账号或密码错误", "suc": "操作成功",
@@ -198,7 +200,7 @@ i18n = {
         "reply_ph": "写下回复...", "send": "发送", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
         "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)",
         "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票",
-        "back": "返回大厅", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐："
+        "back": "返回大厅", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐：", "rec_ph": "输入菜名并回车进行搜索..."
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
@@ -212,7 +214,7 @@ i18n = {
         "h_banner": "Just use this Data Manager to help you to Record Personal Data and Calculate Three-Meal Calories!", "h_chart": "Charts", "h_t1": "📝 Data Entry", "h_t2": "📊 Analytics",
         "d": "Date", "w": "Weight (kg)", "b": "Breakfast", "l": "Lunch", "dn": "Dinner", "sub": "Submit",
         "del": "Delete", "edit": "Edit", "c_rank": "Ranking List", "c_t2": "Discussion", "c_hall": "CHAT HALL — WELCOME TO SHARE WHATEVER YOU LIKE",
-        "search_ph": "Search", "search_go": "Search", "nf_add": "Not found? Add one →", "pub": "Publish", "like": "Like",
+        "search_ph": "Search & Vote", "search_go": "Search", "nf_add": "Publish", "pub": "Publish Post", "like": "Like",
         "tag": "Select Tag", "title_in": "Enter Title", "desc_in": "Enter Details", "log_req": "⚠️ Please login first", "u_t": "👤 My Profile",
         "u_post": "POST", "u_hist": "HISTORY", "u_name": "Name", "u_acct": "Account", "u_pwd": "Password", "pwd_edit": "Change password",
         "new_pwd_title": "NEW PASSWORD", "submit": "Submit", "close": "Close", "err": "Invalid credentials", "suc": "Success",
@@ -221,7 +223,7 @@ i18n = {
         "reply_ph": "Write a reply...", "send": "Send", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
         "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)",
         "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes",
-        "back": "Back to Home", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:"
+        "back": "Back to Home", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:", "rec_ph": "Type dish name and press Enter..."
     },
 }
 t = i18n[st.session_state.lang]
@@ -502,8 +504,11 @@ def _submit_vote(dish_name: str):
     except Exception as e:
         st.error(f"DB Error: {e}")
 
+# ---------- 【重构】社区广场：空气墙分割 + 左侧搜索 + 右侧极简瀑布流 ----------
 def m_community():
-    rank_col, main_col = st.columns([1, 3], gap="medium")
+    # 使用 gap="large" 制造无形空气墙，调整左右占比以适应左侧新加入的搜索模块
+    rank_col, main_col = st.columns([1.2, 2.8], gap="large")
+    
     with rank_col:
         st.markdown(f"<div style='background:{COMM_RANK_SIDEBAR};border-radius:12px;padding:12px 10px 10px 10px;margin-bottom:8px'><div style='font-family:Georgia,serif;font-weight:700;color:#fafafa;margin:0'>{t['c_rank']}</div></div>", unsafe_allow_html=True)
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
@@ -519,62 +524,58 @@ def m_community():
                     if st.session_state.user and st.button(" " if hp else "♥", key=btn_key, help=t["c_vote"], use_container_width=True): _submit_vote(d.get("dish_name"))
         else: st.info(t["no_data"])
 
+        # ----- 将搜索打榜功能移至左侧底部 -----
+        st.markdown(f"<div style='font-size:0.95rem; font-weight:700; color:{TEXT_MAIN}; margin:24px 0 10px 0; border-bottom: 1px solid rgba(150,150,150,0.2); padding-bottom:6px;'>🔍 {t['search_ph']}</div>", unsafe_allow_html=True)
+        
+        if st.session_state.user:
+            sc1, sc2 = st.columns([0.7, 0.3], gap="small")
+            with sc1:
+                q = st.text_input("q", label_visibility="collapsed", placeholder=t["rec_ph"], key="comm_search")
+            with sc2:
+                if st.button(t["search_go"], key="comm_go", use_container_width=True, type="secondary"):
+                    st.session_state["_dish_q"] = q
+                    st.rerun()
+
+            dish_q = st.session_state.pop("_dish_q", None)
+            if dish_q:
+                lib = dish_library[st.session_state.lang]
+                dish_clean = dish_q.strip()
+                matches = [d for d in lib if dish_clean.lower() in d.lower()]
+                if matches:
+                    st.caption(t["guess"])
+                    cols = st.columns(2)  # 适应左侧较窄空间，改为双列布局
+                    for i, match in enumerate(matches[:4]):
+                        if cols[i % 2].button(match, key=f"match_{i}", use_container_width=True): _submit_vote(match)
+                    if dish_clean not in matches and st.button(t["rec_custom"].format(dish_clean), use_container_width=True): _submit_vote(dish_clean)
+                else:
+                    st.caption(t["no_match"])
+                    if st.button(t["rec_custom"].format(dish_clean), key="rec_cust", use_container_width=True): _submit_vote(dish_clean)
+                
+                with st.expander(t["view_lib"]):
+                    formatted_lib = "".join([f"<div style='flex:1 0 40%;margin:4px;padding:8px;background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,.06);text-align:center;color:#1a1a1a;font-size:0.85rem;'>🍲 {d}</div>" for d in lib])
+                    st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
+        else:
+            st.caption(f"🔒 {t['log_req']}")
+
     with main_col:
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         
+        # ----- 右侧纯净瀑布流展示（删除了长列表评论代码） -----
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
-        
-        # 【修改点：只保留纯净的瀑布流】
-        parts = [f"<div style='background:{CHAT_MAIN_BG};padding:12px;border-radius:12px;margin-top:4px;'><div class='masonry'>"]
+        parts = [f"<div style='background:{CHAT_MAIN_BG};padding:14px;border-radius:12px;margin-top:8px;'><div class='masonry'>"]
         for r in comments_data:
             tag_str = f"<span style='color:{DEEP_GREEN};font-size:0.8rem;font-weight:bold;'>{r.get('tag','')}</span><br/>" if r.get('tag') else ""
             parts.append(f"<div class='card-brick'><div style='font-weight:700'>{r.get('dish_name','')}</div><div style='opacity:.85;font-size:.9rem'>{r.get('user_name','')}</div>{tag_str}<div style='margin-top:6px'>{r.get('comment','')}</div></div>")
         parts.append("</div></div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
 
-        st.markdown("<div class='footer-bar'>", unsafe_allow_html=True)
-        fc1, fc2, fc3, fc4 = st.columns([4, 1, 2, 1])
-        with fc1:
-            if st.session_state.user:
-                sp = _icon_path("search")
-                if sp:
-                    sico, sinp = st.columns([0.09, 0.91], gap="small")
-                    with sico:
-                        st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
-                        st.image(str(sp), width=22)
-                    with sinp: q = st.text_input("q", label_visibility="collapsed", placeholder=t["search_ph"], key="comm_search")
-                else: q = st.text_input("q", label_visibility="collapsed", placeholder=t["search_ph"], key="comm_search")
-            else:
-                st.caption(t["log_req"]); q = ""
-        with fc2:
-            if st.session_state.user and st.button(t["search_go"], key="comm_go"): st.session_state["_dish_q"] = st.session_state.get("comm_search", "")
-        with fc3:
-            if st.session_state.user and st.button(t["nf_add"], key="nfadd"): dlg_publish()
-        with fc4:
-            if st.session_state.user:
-                pp = _icon_path("plus")
-                if pp: st.image(str(pp), width=32)
-                if st.button(" " if pp else "➕", key="bigplus", type="primary", use_container_width=True, help=t["nf_add"]):
-                    dlg_publish()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        dish_q = st.session_state.pop("_dish_q", None)
-        if dish_q and st.session_state.user:
-            lib = dish_library[st.session_state.lang]
-            dish_clean = dish_q.strip()
-            matches = [d for d in lib if dish_clean.lower() in d.lower()]
-            if matches:
-                st.caption(t["guess"])
-                cols = st.columns(4)
-                for i, match in enumerate(matches[:4]):
-                    if cols[i % 4].button(match, key=f"match_{i}", use_container_width=True): _submit_vote(match)
-                if dish_clean not in matches and st.button(t["rec_custom"].format(dish_clean), use_container_width=True): _submit_vote(dish_clean)
-            else:
-                st.caption(t["no_match"])
-                if st.button(t["rec_custom"].format(dish_clean), key="rec_cust", use_container_width=True): _submit_vote(dish_clean)
-            with st.expander(t["view_lib"]):
-                formatted_lib = "".join([f"<div style='flex:1 0 21%;margin:6px;padding:10px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.06);text-align:center;color:#1a1a1a;'>🍲 {d}</div>" for d in lib])
-                st.markdown(f"<div style='display:flex;flex-wrap:wrap;justify-content:space-between'>{formatted_lib}</div>", unsafe_allow_html=True)
+        # ----- 底部全宽发布大按钮 -----
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+        if st.session_state.user:
+            if st.button("➕ " + t["pub"], type="primary", use_container_width=True, key="pure_pub_btn"):
+                dlg_publish()
+        else:
+            st.button("🔒 " + t["log_req"], disabled=True, use_container_width=True)
 
 # ---------- 8. 对话框组 ----------
 @st.dialog("📝 发布 / Publish")
