@@ -1,7 +1,7 @@
 """
 AI Health Ecosystem — Streamlit 网页端
 最新优化版：
-1. 彻底修复了社区页面由于字典键值冲突导致的 KeyError Bug（加入绝对唯一索引防弹机制）。
+1. 修复了字典键值丢失导致的 KeyError Bug（补回了 c_vote 等字段）。
 2. 重构社区页面：删除冗长的列表式互动评论，仅保留清爽的高级瀑布流 (Masonry) 展示。
 3. 首页“关于项目”图片模块使用等比例全宽横幅 Banner 展示，不再强制裁剪。
 4. 全局引入 top_back_btn()，所有子功能页面统一提供【⬅️ 返回大厅】按钮。
@@ -84,7 +84,6 @@ def _profile_avatar_html(username: str, avatar_data: str = None) -> str:
     )
 
 def _team_images() -> list[Path]:
-    """升级版扫描引擎：兼容读取 group.png, team.png, time1.jpg, time2.jpg"""
     out: list[Path] = []
     for base in ("group", "team", "time1", "time2"):
         hit = None
@@ -199,7 +198,7 @@ i18n = {
         "reply_ph": "写下回复...", "send": "发送", "rec_custom": "✨ 推荐：{}", "view_lib": "📚 查看系统预设菜品库 (100款)",
         "about": "关于项目", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "访客 (点击登录)",
         "theme_sel": "🎨 UI 主题配色", "lang_sel": "🌐 系统界面语言", "voted": "⚠️ 你已经投过票啦！", "votes": "票",
-        "back": "返回大厅"
+        "back": "返回大厅", "c_vote": "为这道菜投票", "guess": "💡 猜你想选 (点击直接推荐):", "no_match": "🔍 库中暂无此预设菜品，请点击下方作为新菜推荐："
     },
     "🇬🇧 English": {
         "sys_lang": "English", "title": "LLM-based recipe generation and nutrition analysis tool", "login": "Login", "signup": "Signup",
@@ -222,7 +221,7 @@ i18n = {
         "reply_ph": "Write a reply...", "send": "Send", "rec_custom": "✨ Recommend: {}", "view_lib": "📚 View System Dish Library (100 Items)",
         "about": "About our project", "text": "TEXT", "image": "IMAGE", "publish": "Publish", "guest": "Guest (Login)",
         "theme_sel": "🎨 UI Theme Color", "lang_sel": "🌐 Interface Language", "voted": "⚠️ You already voted!", "votes": "votes",
-        "back": "Back to Home"
+        "back": "Back to Home", "c_vote": "Vote for this dish", "guess": "💡 Suggestions (Click to vote):", "no_match": "🔍 Not in library. Click below to recommend:"
     },
 }
 t = i18n[st.session_state.lang]
@@ -302,7 +301,6 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
 .rank-row {{ background: {CREAM}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display:flex; align-items:center; justify-content: space-between; color: #1a1a1a !important; }}
 .chat-head {{ background: {DEEP_GREEN}; color: #e8ffe8; padding: 8px 12px; border-radius: 8px; font-weight: 600; letter-spacing: 0.02em; }}
-.chart-box {{ background: {COMM_RANK_SIDEBAR}; border-radius: 12px; padding: 8px; min-height: 220px; }}
 .profile-side {{ background: {DEEP_GREEN}; border-radius: 14px; padding: 14px; }}
 .section-head {{ background: {DEEP_GREEN}; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 700; }}
 
@@ -510,7 +508,6 @@ def m_community():
         st.markdown(f"<div style='background:{COMM_RANK_SIDEBAR};border-radius:12px;padding:12px 10px 10px 10px;margin-bottom:8px'><div style='font-family:Georgia,serif;font-weight:700;color:#fafafa;margin:0'>{t['c_rank']}</div></div>", unsafe_allow_html=True)
         top_dishes = supabase.table("dish_ranking").select("*").order("votes", desc=True).limit(8).execute().data
         if top_dishes:
-            # 【防弹处理】加入了绝对唯一索引 idx，无论数据怎么脏都不会产生重复 key 导致 KeyError
             for idx, d in enumerate(top_dishes):
                 btn_key = f"hv_rank_{idx}_{d.get('id', 'unk')}"
                 row_l, row_r = st.columns([0.78, 0.22], gap="small")
@@ -526,7 +523,8 @@ def m_community():
         st.markdown(f"<div class='chat-head'>{t['c_hall']}</div>", unsafe_allow_html=True)
         
         comments_data = supabase.table("comments").select("*").order("id", desc=True).execute().data
-        # 【极简重构】仅保留瀑布流
+        
+        # 【修改点：只保留纯净的瀑布流】
         parts = [f"<div style='background:{CHAT_MAIN_BG};padding:12px;border-radius:12px;margin-top:4px;'><div class='masonry'>"]
         for r in comments_data:
             tag_str = f"<span style='color:{DEEP_GREEN};font-size:0.8rem;font-weight:bold;'>{r.get('tag','')}</span><br/>" if r.get('tag') else ""
