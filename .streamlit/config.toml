@@ -1,4 +1,10 @@
-[server]
-enableWebsocketCompression = false
-[browser]
-gatherUsageStats = false
+[theme]
+  base = "light"
+  primaryColor = "#2f4a35"
+  backgroundColor = "#e6f2e0"
+  secondaryBackgroundColor = "#f3f0e4"
+  textColor = "#1a1a1a"
+  font = "serif"
+
+  [client]
+  showErrorDetails = true
