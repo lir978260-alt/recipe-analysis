@@ -1,12 +1,3 @@
-"""
-AI Health Ecosystem — Streamlit 网页端 (极致安全 & 丝滑流畅版)
-核心优化：
-1. [修复] 重构 AI 厨房模块逻辑：修复未登录时收藏按钮消失的问题，以及点击收藏后生成内容闪退的问题。
-2. [极致提速] 移除了 Cookie 鉴权时的冗余 st.rerun()，彻底解决双重加载导致的严重卡顿。
-3. [防爆保护] 为社区动态流增加 .limit(30) 限制，防止大量图片拉取导致前端 DOM 渲染崩溃。
-4. [平滑升级] 包含旧账号明文密码登录时的“无感自动升级为强哈希”机制。
-5. [核心安全] 防 XSS、防越权、防木马（PIL 重采样）、HMAC 签名安全 Cookie 全面保留。
-"""
 from __future__ import annotations
 
 import base64
@@ -20,7 +11,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-# 核心安全依赖：图片洗稿与压缩防爆
 try:
     from PIL import Image
 except ImportError:
@@ -35,20 +25,15 @@ import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
 
-# ==========================================
-# 0. 核心安全引擎 (Security Core)
-# ==========================================
 COOKIE_SECRET = st.secrets.get("COOKIE_SECRET", "super_secret_fallback_key_123!@#")
 
 def hash_password(password: str, salt: str = None) -> str:
-    """PBKDF2_HMAC 强哈希加密"""
     if not salt:
         salt = secrets.token_hex(16)
     pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
     return f"{salt}${pwd_hash.hex()}"
 
 def verify_password_with_upgrade(stored_password: str, provided_password: str) -> tuple[bool, bool]:
-    """智能密码验证引擎 (支持老用户平滑升级)"""
     if "$" not in stored_password:
         if stored_password == provided_password:
             return True, True  
@@ -61,12 +46,10 @@ def verify_password_with_upgrade(stored_password: str, provided_password: str) -
         return False, False
 
 def sign_cookie(username: str) -> str:
-    """为 Cookie 颁发防篡改签名"""
     signature = hmac.new(COOKIE_SECRET.encode(), username.encode(), hashlib.sha256).hexdigest()
     return f"{username}.{signature}"
 
 def verify_cookie(cookie_value: str) -> str | None:
-    """验证并提取安全的 Cookie"""
     if not cookie_value or "." not in cookie_value:
         return None
     username, signature = cookie_value.split(".", 1)
@@ -76,7 +59,6 @@ def verify_cookie(cookie_value: str) -> str | None:
     return None
 
 def process_safe_image(uploaded_file, max_mb=2, max_dim=800) -> tuple[str | None, str | None]:
-    """图片安全过滤与重采样引擎"""
     if not uploaded_file:
         return None, None
     if uploaded_file.size > max_mb * 1024 * 1024:
@@ -94,8 +76,6 @@ def process_safe_image(uploaded_file, max_mb=2, max_dim=800) -> tuple[str | None
     except Exception:
         return None, "非法或损坏的图像文件"
 
-
-# ---------- 1. 静态资源路径 ----------
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 if not STATIC.is_dir():
@@ -172,8 +152,6 @@ def _team_images() -> list[Path]:
             out.append(hit)
     return out
 
-
-# ---------- 2. 页面状态与自适应配置 ----------
 st.set_page_config(
     page_title="AI Health Ecosystem",
     page_icon=_page_icon_arg(),
@@ -211,8 +189,6 @@ if st.query_params.get("_home") == "1":
     st.query_params.clear()
     st.rerun()
 
-
-# ---------- 3. 动态主题颜色配置库 ----------
 theme_colors = {
     "🍵 抹茶绿 (Matcha Green)": {
         "SAGE_BG": "#e6f2e0", "DEEP_GREEN": "#2f4a35", "CREAM": "#f3f0e4", 
@@ -251,8 +227,6 @@ BTN_BG = c["BTN_BG"]
 BTN_TEXT = c["BTN_TEXT"]
 TEXT_MAIN = c["TEXT_MAIN"]
 
-
-# ---------- 4. 双语字典引擎 (i18n) ----------
 i18n = {
     "🇨🇳 简体中文": {
         "sys_lang": "简体中文", "title": "基于大模型的食谱生成和营养分析工具", "login": "登录", "signup": "注册",
@@ -334,8 +308,6 @@ dish_library = {
     ],
 }
 
-
-# ---------- 5. 动态响应全局 CSS 与 UI 自适应微调 ----------
 st.markdown(
     f"""
 <style>
@@ -343,37 +315,65 @@ header[data-testid="stHeader"], footer {{ visibility: hidden !important; height:
 .stApp {{ background: {SAGE_BG} !important; color: {TEXT_MAIN} !important; }}
 .block-container {{ max-width: 1280px !important; padding-top: 2rem !important; }}
 
-div[data-testid="stButton"] > button {{ border-color: rgba(150,150,150,0.25) !important; }}
+div[data-testid="stButton"] > button {{
+    background: {BTN_BG} !important;
+    color: {BTN_TEXT} !important;
+    border: none !important;
+    border-radius: 999px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+}}
+div[data-testid="stButton"] > button:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
+div[data-testid="stButton"] > button:disabled {{ opacity: 0.55 !important; }}
 
-.pill-btn > button {{ 
-    background: {BTN_BG} !important; 
-    color: {BTN_TEXT} !important; 
-    border-radius: 999px !important; 
-    border: none !important; 
-    padding: 0.4rem 1rem !important; 
-    white-space: nowrap !important; 
+div[data-testid="column"]:has(.pill-btn) div[data-testid="stButton"] > button {{
+    background: {BTN_BG} !important;
+    color: {BTN_TEXT} !important;
+    border-radius: 999px !important;
+    border: none !important;
+    padding: 0.4rem 1rem !important;
+    white-space: nowrap !important;
     min-width: max-content !important;
 }}
-.pill-btn > button:hover {{ filter: brightness(0.9) !important; }}
 
-.side-card button {{ 
-    background: {BTN_BG} !important; color: {BTN_TEXT} !important; border-radius: 20px !important; 
-    min-height: 50px !important; white-space: pre-wrap !important; text-align: center !important; 
-    border: 2px solid {BTN_TEXT} !important; font-weight: bold !important; margin-bottom: 15px !important; 
+div[data-testid="column"]:has(.side-card) div[data-testid="stButton"] > button {{
+    background: {BTN_BG} !important;
+    color: {BTN_TEXT} !important;
+    border-radius: 20px !important;
+    min-height: 50px !important;
+    white-space: pre-wrap !important;
+    text-align: center !important;
+    border: 2px solid {BTN_TEXT} !important;
+    font-weight: bold !important;
+    margin-bottom: 15px !important;
 }}
-.side-card button:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
 
-div[data-testid="stDownloadButton"] > button[kind="primary"] {{
-    display: block; width: 100%; background: {BTN_BG} !important; color: {BTN_TEXT} !important; 
+div[data-testid="stDownloadButton"] > button {{
+    display: block; width: 100%; background: {BTN_BG} !important; color: {BTN_TEXT} !important;
     text-align: center; border-radius: 8px !important; padding: 8px 14px !important; border: none !important; font-weight: 600 !important;
 }}
-div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
+div[data-testid="stDownloadButton"] > button:hover {{ filter: brightness(0.9) !important; color: {BTN_TEXT} !important; }}
 
-.user-btn-wrapper button {{
+div[data-testid="column"]:has(.user-btn-wrapper) div[data-testid="stButton"] > button {{
     background: #ffffff !important; color: #333333 !important; border: 1px solid rgba(0,0,0,0.1) !important;
     border-radius: 8px !important; font-weight: normal !important; padding: 8px !important; width: 100% !important;
 }}
-.user-btn-wrapper button:hover {{ background: #f9f9f9 !important; }}
+div[data-testid="column"]:has(.user-btn-wrapper) div[data-testid="stButton"] > button:hover {{ background: #f9f9f9 !important; color: #333333 !important; }}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stDateInput"] input,
+div[data-testid="stTextArea"] textarea {{
+    background-color: #ffffff !important;
+    color: #1a1a1a !important;
+    -webkit-text-fill-color: #1a1a1a !important;
+    border-radius: 8px !important;
+}}
+div[data-testid="stTextInput"] input::placeholder,
+div[data-testid="stTextArea"] textarea::placeholder {{ color: #9aa0a6 !important; -webkit-text-fill-color: #9aa0a6 !important; }}
+div[data-baseweb="select"] > div {{ background-color: #ffffff !important; color: #1a1a1a !important; }}
+div[data-baseweb="select"] div {{ color: #1a1a1a !important; }}
+label, .stMarkdown, p, span, li {{ color: {TEXT_MAIN}; }}
 
 .footer-bar {{ background: {DEEP_GREEN}; padding: 10px 12px; border-radius: 12px; margin-top: 8px; }}
 .card-brick {{ break-inside: avoid; background: #fff; border-radius: 12px; padding: 10px; margin: 0 0 10px 0; border: 1px solid rgba(0,0,0,0.06); color: #1a1a1a !important; }}
@@ -384,21 +384,19 @@ div[data-testid="stDownloadButton"] > button[kind="primary"]:hover {{ filter: br
 
 @media screen and (max-width: 1200px) {{
     h2 {{ font-size: 1.6rem !important; }}
-    .side-card button {{ font-size: 0.9rem !important; min-height: 45px !important; margin-bottom: 10px !important; }}
-    .pill-btn > button {{ padding: 0.3rem 0.7rem !important; font-size: 0.9rem !important; }}
+    div[data-testid="column"]:has(.side-card) div[data-testid="stButton"] > button {{ font-size: 0.9rem !important; min-height: 45px !important; margin-bottom: 10px !important; }}
+    div[data-testid="column"]:has(.pill-btn) div[data-testid="stButton"] > button {{ padding: 0.3rem 0.7rem !important; font-size: 0.9rem !important; }}
 }}
 @media screen and (max-width: 768px) {{
     h2 {{ font-size: 1.4rem !important; }}
-    .side-card button {{ font-size: 0.85rem !important; }}
-    .pill-btn > button {{ font-size: 0.85rem !important; }}
+    div[data-testid="column"]:has(.side-card) div[data-testid="stButton"] > button {{ font-size: 0.85rem !important; }}
+    div[data-testid="column"]:has(.pill-btn) div[data-testid="stButton"] > button {{ font-size: 0.85rem !important; }}
 }}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-
-# ---------- 6. 数据库与 AI 接口 ----------
 @st.cache_resource
 def init_db():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -408,7 +406,6 @@ try:
 except Exception:
     st.error("Database connection failed.")
     st.stop()
-
 
 def ask_ai_stream(sys_p, usr_p, img=None):
     lang_inst = "简体中文 (Simplified Chinese)" if t["sys_lang"] == "简体中文" else "English"
@@ -456,20 +453,12 @@ def _require_login():
     st.warning("请先登录 / Please login first")
     st.stop()
 
-
-# ==========================================
-# 7. 统一返回主页按钮组件
-# ==========================================
 def top_back_btn():
     if st.button("⬅️ " + t["back"], key=f"btn_back_{st.session_state.current_page}"):
         st.session_state.current_page = "Home"
         st.rerun()
     st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'/>", unsafe_allow_html=True)
 
-
-# ==========================================
-# 8. 各功能页面区
-# ==========================================
 def m_kitchen():
     L, R = st.columns(2, gap="large")
     desc_style = f"background:{DEEP_GREEN};color:#fff;padding:12px 14px;border-radius:12px;font-size:0.95rem;height:120px;box-sizing:border-box;overflow-y:auto;margin-bottom:15px;"
@@ -491,17 +480,14 @@ def m_kitchen():
                     res_stream = ask_ai_stream("You are a Master Chef.", f"Identify ingredients and generate a professional recipe. Preferences: {pref}", up.getvalue())
                     st.session_state["l_rec"] = st.write_stream(res_stream)
         elif st.session_state.get("l_rec"):
-            # 防止重新渲染时生成的食谱消失
             st.markdown(st.session_state["l_rec"])
 
-        # 无论是否登录，只要有食谱就显示收藏按钮
         if st.session_state.get("l_rec"):
             if st.button(t["fav"], use_container_width=True, type="secondary"):
                 if not st.session_state.user:
-                    st.warning(t["log_req"]) # 未登录时弹出警告
+                    st.warning(t["log_req"])
                 else:
                     try:
-                        # 防越权
                         supabase.table("favorites").insert({"username": st.session_state.user, "recipe_content": st.session_state["l_rec"]}).execute()
                         st.success(t["suc"])
                     except Exception as e: 
@@ -523,7 +509,6 @@ def m_kitchen():
                 with st.spinner(t["think"]):
                     res_stream = ask_ai_stream("You are a professional Dietitian.", q, up_nutri.getvalue() if up_nutri else None)
                     st.write_stream(res_stream)
-
 
 def m_health():
     if not st.session_state.user: _require_login()
@@ -599,7 +584,6 @@ def _submit_vote(dish_name: str):
     except Exception as e:
         st.error(f"DB Error: {e}")
 
-# ---------- 社区广场 ----------
 def m_community():
     rank_col, main_col = st.columns([1.2, 2.8], gap="large")
     
@@ -696,8 +680,6 @@ def m_community():
                         supabase.table("comments").update({"likes": int(r.get("likes", 0)) + 1, "liked_by": lk}).eq("id", r.get("id")).execute()
                         st.rerun()
 
-
-# ---------- 8. 对话框组 ----------
 @st.dialog("📝 发布 / Publish")
 def dlg_publish():
     tag_opts = ["#Daily", "#Diet", "#Yummy"] if t["sys_lang"] == "English" else ["#日常", "#减脂", "#神仙菜"]
@@ -830,7 +812,6 @@ def _save_profile_name(key: str):
         supabase.table("app_users").update({"profile_name": str(nv)}).eq("username", st.session_state.user).execute()
     except Exception: st.session_state["_profile_warn"] = "需在 app_users 添加 profile_name 字段。"
 
-
 def m_profile():
     if not st.session_state.user: _require_login()
     L, R = st.columns([2, 1], gap="medium")
@@ -889,8 +870,6 @@ def m_profile():
         if st.session_state.get("_profile_warn"): st.warning(st.session_state.pop("_profile_warn"))
         st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ---------- 9. 布局分发渲染 ----------
 def render_home():
     side, main = st.columns([0.28, 0.72], gap="large")
     
@@ -987,8 +966,6 @@ def render_home():
         else:
             st.markdown("<div style='background:linear-gradient(180deg,#1a4a6e 0%,#0d2840 100%);height:360px;border-radius:12px;margin-top:8px;display:flex;align-items:center;justify-content:center;color:#b8d4ec;font-size:14px;letter-spacing:.04em;border: 1px solid rgba(150,150,150,0.2);'>Please place about.jpg in the directory</div>", unsafe_allow_html=True)
 
-
-# ---------- 10. 路由分发渲染 ----------
 def m_about():
     imgs = _team_images()
     if not imgs:
